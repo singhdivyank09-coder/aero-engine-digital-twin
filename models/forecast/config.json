@@ -1,0 +1,42 @@
+{
+  "model_type": "GRU",
+  "input_dim": 18,
+  "hidden_dim": 64,
+  "num_layers": 2,
+  "output_dim": 18,
+  "sequence_length": 60,
+  "sampling_rate_hz": 2.0,
+  "feature_columns": [
+    "rpm",
+    "map",
+    "cht1",
+    "cht2",
+    "cht3",
+    "cht4",
+    "egt1",
+    "egt2",
+    "egt3",
+    "egt4",
+    "oil_pressure",
+    "oil_temperature",
+    "fuel_flow",
+    "vibration_rms",
+    "bus_voltage",
+    "altitude",
+    "ambient_temperature",
+    "throttle"
+  ],
+  "target_columns": [
+    "cht1",
+    "oil_pressure",
+    "oil_temperature",
+    "vibration_rms",
+    "egt1",
+    "map"
+  ],
+  "horizons_seconds": [
+    10,
+    30,
+    60
+  ]
+}

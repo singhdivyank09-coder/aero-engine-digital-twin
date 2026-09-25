@@ -1,0 +1,22 @@
+version: '3.8'
+
+services:
+  aero_twin_app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: aero_engine_digital_twin
+    ports:
+      - "8000:8000"
+    volumes:
+      # Mount local data directory for lightweight SQLite database persistence
+      - ./data:/app/data
+    environment:
+      - PYTHONUNBUFFERED=1
+      - PORT=8000
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')\""]
+      interval: 10s
+      timeout: 5s
+      retries: 3

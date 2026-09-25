@@ -1,0 +1,132 @@
+{
+  "model": "GRU",
+  "model_version": "v1.0",
+  "training_dataset": "SIMULATED REFERENCE AERO-PISTON TRAJECTORY",
+  "input_window_seconds": 30,
+  "input_features": [
+    "rpm",
+    "map",
+    "cht1",
+    "cht2",
+    "cht3",
+    "cht4",
+    "egt1",
+    "egt2",
+    "egt3",
+    "egt4",
+    "oil_pressure",
+    "oil_temperature",
+    "fuel_flow",
+    "vibration_rms",
+    "bus_voltage",
+    "altitude",
+    "ambient_temperature",
+    "throttle"
+  ],
+  "target_parameters": [
+    "cht1",
+    "oil_pressure",
+    "oil_temperature",
+    "vibration_rms",
+    "egt1",
+    "map"
+  ],
+  "horizons_seconds": [
+    10,
+    30,
+    60
+  ],
+  "train_trajectories": 125,
+  "val_trajectories": 27,
+  "test_trajectories": 28,
+  "train_windows": 1038,
+  "val_windows": 194,
+  "test_windows": 191,
+  "best_val_loss": 0.141259,
+  "metrics_by_parameter_horizon": {
+    "cht1": {
+      "10s": {
+        "mae": 2.2977,
+        "rmse": 3.2729
+      },
+      "30s": {
+        "mae": 1.4124,
+        "rmse": 2.0196
+      },
+      "60s": {
+        "mae": 1.185,
+        "rmse": 1.7952
+      }
+    },
+    "oil_pressure": {
+      "10s": {
+        "mae": 0.0579,
+        "rmse": 0.1806
+      },
+      "30s": {
+        "mae": 0.0595,
+        "rmse": 0.1811
+      },
+      "60s": {
+        "mae": 0.0624,
+        "rmse": 0.1796
+      }
+    },
+    "oil_temperature": {
+      "10s": {
+        "mae": 1.8795,
+        "rmse": 4.0534
+      },
+      "30s": {
+        "mae": 2.7262,
+        "rmse": 6.0352
+      },
+      "60s": {
+        "mae": 3.72,
+        "rmse": 8.7338
+      }
+    },
+    "vibration_rms": {
+      "10s": {
+        "mae": 0.0786,
+        "rmse": 0.1528
+      },
+      "30s": {
+        "mae": 0.0812,
+        "rmse": 0.1507
+      },
+      "60s": {
+        "mae": 0.0825,
+        "rmse": 0.1467
+      }
+    },
+    "egt1": {
+      "10s": {
+        "mae": 6.8493,
+        "rmse": 11.464
+      },
+      "30s": {
+        "mae": 3.4199,
+        "rmse": 5.3313
+      },
+      "60s": {
+        "mae": 3.2008,
+        "rmse": 4.8765
+      }
+    },
+    "map": {
+      "10s": {
+        "mae": 0.0073,
+        "rmse": 0.0106
+      },
+      "30s": {
+        "mae": 0.0098,
+        "rmse": 0.0147
+      },
+      "60s": {
+        "mae": 0.0084,
+        "rmse": 0.0128
+      }
+    }
+  }
+}

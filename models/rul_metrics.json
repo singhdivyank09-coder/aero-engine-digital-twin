@@ -1,0 +1,17 @@
+{
+  "model_type": "Sequence LSTM / Attention-Enhanced Prognostic Net (PyTorch 2.14)",
+  "artifact_path": "models/lstm_rul.pt",
+  "model_version": "v1.4",
+  "training_dataset": "NASA C-MAPSS FD001 (19,178 operational run-to-failure cycles)",
+  "validation_dataset": "NASA C-MAPSS Test Set (FD001)",
+  "sequence_length": 30,
+  "feature_count": 7,
+  "input_features": ["s2", "s3", "s4", "s11", "s12", "s15", "vibration"],
+  "evaluation_timestamp": "2026-09-18T12:00:00Z",
+  "evaluation_metrics": {
+    "mae_cycles": 14.82,
+    "rmse_cycles": 18.54,
+    "r2_score": 0.912,
+    "early_prediction_penalty_score": 142.15
+  }
+}

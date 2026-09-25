@@ -1,0 +1,28 @@
+{
+  "model_type": "Deep Autoencoder (PyTorch 2.14)",
+  "artifact_path": "models/autoencoder_anomaly.pt",
+  "model_version": "v2.1",
+  "architecture": "Linear(15, 10) -> ReLU -> Linear(10, 5) -> ReLU -> Linear(5, 10) -> ReLU -> Linear(10, 15)",
+  "training_dataset": "NASA C-MAPSS FD001 & UAV Telemetry Baseline",
+  "validation_dataset": "NASA C-MAPSS Test Set (FD001)",
+  "feature_count": 15,
+  "input_features": [
+    "rpm", "map", "cht1", "cht2", "cht3", "cht4",
+    "egt1", "egt2", "egt3", "egt4", "oil_press", "oil_temp",
+    "fuel_flow", "vibration_rms", "battery_volt"
+  ],
+  "training_epochs": 50,
+  "batch_size": 64,
+  "loss_function": "Mean Squared Error (MSE)",
+  "threshold_source": "99th Percentile Healthy Reconstruction MSE (1.67886)",
+  "healthy_mse_threshold": 1.67886,
+  "evaluation_timestamp": "2026-09-18T12:00:00Z",
+  "evaluation_metrics": {
+    "precision": 0.964,
+    "recall": 0.952,
+    "f1_score": 0.958,
+    "roc_auc": 0.985,
+    "healthy_reconstruction_mse_mean": 0.0421,
+    "anomalous_reconstruction_mse_mean": 3.8420
+  }
+}

@@ -1,0 +1,84 @@
+{
+  "project": "MALE UAV Aero-Piston Engine Digital Twin — SIH 26054 Software Prototype",
+  "engine_reference": "4-Cylinder Turbocharged Aero-Piston Reference Model",
+  "disclaimer": "Software demonstrator using public/analogous datasets. Not connected to an operational UAV.",
+  "dataset_provenance_table": [
+    {
+      "dataset": "NASA C-MAPSS (FD001)",
+      "original_feature": "s2",
+      "original_physical_meaning": "Total Temperature at LPC outlet (°R)",
+      "prototype_usage": "Degradation trend & RUL sequence input",
+      "mapping_type": "ANALOGUE"
+    },
+    {
+      "dataset": "NASA C-MAPSS (FD001)",
+      "original_feature": "s3",
+      "original_physical_meaning": "Total Temperature at HPC outlet (°R)",
+      "prototype_usage": "Degradation trend & RUL sequence input",
+      "mapping_type": "ANALOGUE"
+    },
+    {
+      "dataset": "NASA C-MAPSS (FD001)",
+      "original_feature": "s4",
+      "original_physical_meaning": "Physical Fan Speed (RPM)",
+      "prototype_usage": "Degradation trend & RUL sequence input",
+      "mapping_type": "ANALOGUE"
+    },
+    {
+      "dataset": "NASA C-MAPSS (FD001)",
+      "original_feature": "s7",
+      "original_physical_meaning": "HPC Outlet Pressure (psia)",
+      "prototype_usage": "Degradation trend & RUL sequence input",
+      "mapping_type": "ANALOGUE"
+    },
+    {
+      "dataset": "NASA C-MAPSS (FD001)",
+      "original_feature": "s11",
+      "original_physical_meaning": "Static Pressure at HPC outlet (psia)",
+      "prototype_usage": "Degradation trend & RUL sequence input",
+      "mapping_type": "ANALOGUE"
+    },
+    {
+      "dataset": "NASA C-MAPSS (FD001)",
+      "original_feature": "s12",
+      "original_physical_meaning": "Fuel Flow Ratio (pps/psi)",
+      "prototype_usage": "Degradation trend & RUL sequence input",
+      "mapping_type": "ANALOGUE"
+    },
+    {
+      "dataset": "NASA C-MAPSS (FD001)",
+      "original_feature": "s15",
+      "original_physical_meaning": "Bypass Ratio",
+      "prototype_usage": "Degradation trend & RUL sequence input",
+      "mapping_type": "ANALOGUE"
+    },
+    {
+      "dataset": "ALFA UAV Dataset",
+      "original_feature": "battery_v",
+      "original_physical_meaning": "Avionics Bus Voltage (V)",
+      "prototype_usage": "Electrical subsystem health & sensor drift",
+      "mapping_type": "DIRECT"
+    },
+    {
+      "dataset": "RflyMAD Dataset",
+      "original_feature": "gyro_z",
+      "original_physical_meaning": "Yaw Rate (rad/s)",
+      "prototype_usage": "Airframe vibration & attitude disturbance",
+      "mapping_type": "DERIVED"
+    },
+    {
+      "dataset": "UAV-FD (Zenodo)",
+      "original_feature": "pwm_out",
+      "original_physical_meaning": "Actuator PWM Duty Cycle",
+      "prototype_usage": "Actuator fault behavior baseline",
+      "mapping_type": "ANALOGUE"
+    },
+    {
+      "dataset": "VAero-Lab Database",
+      "original_feature": "piston_displacement",
+      "original_physical_meaning": "1211cc 4-Stroke Engine Displacement",
+      "prototype_usage": "1D Thermodynamics & Power Physics Baseline",
+      "mapping_type": "SIMULATED"
+    }
+  ]
+}

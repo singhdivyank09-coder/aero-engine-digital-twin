@@ -1,0 +1,14 @@
+{
+  "model_version": "PyTorch-LSTM-ShortHorizonForecaster-v1.0",
+  "training_dataset": "SIMULATED REFERENCE AERO-PISTON TRAJECTORIES",
+  "provenance": "Synthetic simulator trajectories (Not DRDO flight measurements)",
+  "sequence_window_length_sec": 30.0,
+  "forecast_horizons_sec": [
+    10.0,
+    30.0,
+    60.0
+  ],
+  "test_mae": 0.2769,
+  "test_rmse": 0.5411,
+  "feature_count": 5
+}

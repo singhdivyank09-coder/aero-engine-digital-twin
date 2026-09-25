@@ -1,0 +1,1792 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Aero Piston Engine Digital Twin Suite (MALE UAVs)</title>
+    <!-- Google Fonts: Outfit, Inter & Orbitron -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&family=Orbitron:wght@600;700;900&display=swap" rel="stylesheet">
+    <!-- FontAwesome icons & Chart.js -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="/static/styles.css?v=5">
+</head>
+<body class="light-aerospace-theme">
+
+    <!-- LOGIN SCREEN OVERLAY -->
+    <div id="login-modal" class="modal-overlay active">
+        <div class="login-card glass-panel">
+            <div class="defense-badge">
+                <i class="fa-solid fa-shield-halved"></i> AERO DIGITAL TWIN PORTAL
+            </div>
+            <h2>AERO PISTON ENGINE DIGITAL TWIN</h2>
+            <p class="subtitle">MALE UAV Fleet Reliability & Health Monitoring System</p>
+
+            <form id="login-form">
+                <div class="input-group">
+                    <label><i class="fa-solid fa-user"></i> Username</label>
+                    <input type="text" id="username" value="operator" required placeholder="operator or engineer">
+                </div>
+                <div class="input-group">
+                    <label><i class="fa-solid fa-lock"></i> Password</label>
+                    <input type="password" id="password" value="operator123" required placeholder="Password">
+                </div>
+                <div class="demo-credentials">
+                    <div><span class="role-badge op">Operator:</span> <code>operator / operator123</code></div>
+                    <div><span class="role-badge eng">Engineer:</span> <code>engineer / engineer123</code></div>
+                </div>
+                <button type="submit" class="btn btn-primary btn-glow full-width">
+                    <i class="fa-solid fa-right-to-bracket"></i> AUTHENTICATE & LAUNCH GCS
+                </button>
+            </form>
+            <div id="login-server-status" class="margin-top" style="font-size: 0.78rem; color: var(--primary-blue);">
+                <i class="fa-solid fa-circle-notch fa-spin"></i> Connecting to backend server (127.0.0.1:8000)...
+            </div>
+            <div id="login-error" class="error-msg"></div>
+        </div>
+    </div>
+
+    <!-- MAIN GROUND CONTROL STATION INTERFACE -->
+    <div id="main-gcs" class="gcs-container hidden">
+        
+        <!-- TOP HEADER NAVBAR -->
+        <header class="gcs-header glass-header">
+            <div class="header-left">
+                <div class="logo-mark"><i class="fa-solid fa-jet-fighter"></i></div>
+                <div class="title-block">
+                    <h1>MALE UAV Aero-Piston Engine Digital Twin — Demo Prototype</h1>
+                    <span class="sub-status"><i class="fa-solid fa-shield-halved text-green"></i> 4-Cylinder Turbocharged Aero-Piston Reference Model | <strong id="link-status">SYNCHRONIZED (10Hz)</strong></span>
+                </div>
+            </div>
+
+            <div class="header-center">
+                <div class="hud-pill">
+                    <span class="hud-label">SYSTEM STATE</span>
+                    <span id="header-state" class="badge-state NORMAL">NORMAL</span>
+                </div>
+                <div class="hud-pill">
+                    <span class="hud-label">HEALTH INDEX</span>
+                    <span class="hud-val hud-green" id="header-hi">98.0%</span>
+                </div>
+                <div class="hud-pill">
+                    <span class="hud-label">ANOMALY SCORE</span>
+                    <span class="hud-val hud-cyan" id="header-anomaly">0.015</span>
+                </div>
+                <div class="hud-pill" title="Prototype RUL — C-MAPSS Analogous Prognostics (Updated every 30 sequence cycles)">
+                    <span class="hud-label">PROTOTYPE RUL*</span>
+                    <span class="hud-val hud-gold" id="header-rul">210 cycles</span>
+                </div>
+            </div>
+
+            <div class="header-right">
+                <div class="user-profile">
+                    <span class="badge-role eng" id="user-role-badge">ENGINEER</span>
+                    <span class="user-name" id="user-display-name">Demo Prototype Operator</span>
+                </div>
+                <button id="btn-logout" class="btn btn-secondary btn-sm"><i class="fa-solid fa-power-off"></i></button>
+            </div>
+        </header>
+
+        <!-- MANDATORY DISCLAIMER BANNER -->
+        <div class="disclaimer-banner" style="background:#f1f5f9; border-bottom:1px solid var(--border-light); padding:0.4rem 2rem; font-size:0.75rem; color:var(--text-muted); display:flex; justify-content:space-between; align-items:center;">
+            <span><i class="fa-solid fa-circle-info text-blue"></i> <strong>Disclaimer:</strong> Software demonstrator using public/analogous datasets. Not connected to an operational UAV.</span>
+            <span><i class="fa-solid fa-code-commit"></i> Demo Prototype Single Source of Truth Digital Twin Core</span>
+        </div>
+
+
+        <!-- CONTROL NAVIGATION TABS & DATA SOURCE SELECTORS -->
+        <nav class="gcs-nav" id="gcs-main-navigation">
+            <div class="nav-tabs-wrapper">
+                <div class="nav-tabs" id="nav-tabs-list">
+                    <button class="nav-tab active" data-target="view-operator" title="Operator Dashboard">
+                        <i class="fa-solid fa-gauge-high"></i>
+                        <span>Operator Dashboard</span>
+                    </button>
+                    <button class="nav-tab" data-target="view-digital-twin" title="2D Digital Twin Schematic">
+                        <i class="fa-solid fa-atom"></i>
+                        <span>2D Digital Twin Schematic</span>
+                    </button>
+                    <button class="nav-tab" data-target="view-engineer" title="Fault Injection & Analytics">
+                        <i class="fa-solid fa-sliders"></i>
+                        <span>Fault Injection & Analytics</span>
+                    </button>
+                    <button class="nav-tab" data-target="view-replay" title="Mission Replay & Reports">
+                        <i class="fa-solid fa-clock-rotate-left"></i>
+                        <span>Mission Replay & Reports</span>
+                    </button>
+                    <button class="nav-tab" data-target="view-models-datasets" title="AI Models & Dataset Mapping">
+                        <i class="fa-solid fa-brain"></i>
+                        <span>AI Models & Dataset Mapping</span>
+                    </button>
+                    <button class="nav-tab" data-target="view-gcs-dfcs" title="GCS & DFCS Demonstrator">
+                        <i class="fa-solid fa-tower-cell"></i>
+                        <span>GCS & DFCS Demonstrator</span>
+                    </button>
+                    <button class="nav-tab" data-target="view-metrics" title="System Metrics & Assumptions">
+                        <i class="fa-solid fa-chart-simple"></i>
+                        <span>System Metrics & Assumptions</span>
+                    </button>
+                    <button class="nav-tab" data-target="view-audit" title="Security Audit Logs">
+                        <i class="fa-solid fa-list-check"></i>
+                        <span>Security Audit Logs</span>
+                    </button>
+                </div>
+            </div>
+            
+            <!-- DUAL DATA SOURCE & SCENARIO SELECTORS -->
+            <div class="mission-selector">
+                <div class="selector-group">
+                    <label title="Primary physical/telemetry stream for canonical aero-piston engine">
+                        <i class="fa-solid fa-server" style="color:var(--primary-blue);"></i> <span class="lbl-text">Twin Telemetry Source:</span>
+                    </label>
+                    <select id="select-telemetry-source">
+                        <option value="SIMULATOR" selected>Reference Aero-Piston Simulator</option>
+                        <option value="REPLAY">Historical Aero-Piston Replay</option>
+                    </select>
+                </div>
+                <div class="selector-group">
+                    <label title="Public dataset driving RUL prognostics, anomaly, and fault models">
+                        <i class="fa-solid fa-database" style="color:#7c3aed;"></i> <span class="lbl-text">Analytics Dataset:</span>
+                    </label>
+                    <select id="select-analytics-dataset">
+                        <option value="CMAPSS" selected>NASA C-MAPSS (RUL / Degradation Model)</option>
+                        <option value="ALFA">ALFA UAV Dataset (Autonomous Fault Classifiers)</option>
+                        <option value="RFLYMAD">RflyMAD Dataset (Multi-Sensor Health Models)</option>
+                        <option value="UAVFD">UAV-FD Dataset (Actuator Fault Logs)</option>
+                    </select>
+                </div>
+                <div class="selector-group">
+                    <label><i class="fa-solid fa-plane-triangle"></i> <span class="lbl-text">Scenario:</span></label>
+                    <select id="select-mission-profile">
+                        <option value="CRUISE" selected>Cruise (Nominal 1500m)</option>
+                        <option value="HIGH_ALTITUDE">High Altitude (4500m - Turbo Boost)</option>
+                        <option value="HOT_WEATHER">Hot Weather (42°C Ambient)</option>
+                        <option value="ENDURANCE">Long Endurance Flight</option>
+                        <option value="RAPID_THROTTLE">Rapid Throttle Transitions</option>
+                    </select>
+                </div>
+            </div>
+        </nav>
+
+        <!-- DASHBOARD VIEWPORT -->
+        <main class="gcs-viewport">
+
+            <!-- 1. OPERATOR DASHBOARD VIEW -->
+            <div id="view-operator" class="tab-content active">
+
+                <!-- LIVE SCENARIO & ENVIRONMENT BANNER -->
+                <div id="op-scenario-env-bar" class="card glass-panel" style="padding:0.6rem 1rem; margin-bottom:1rem; display:flex; justify-content:space-between; align-items:center; background:#ffffff; border:1px solid var(--border-light); font-size:0.8rem;">
+                    <div>
+                        <span class="lbl-text" style="font-weight:700; color:var(--text-secondary);"><i class="fa-solid fa-plane"></i> ACTIVE TWIN SCENARIO:</span> 
+                        <span id="op-env-scenario" class="badge-tag direct" style="margin-left:6px;">CRUISE</span>
+                    </div>
+                    <div style="display:flex; gap:1.25rem; font-size:0.78rem; color:var(--text-secondary);">
+                        <span><i class="fa-solid fa-mountain" style="color:var(--primary-blue);"></i> Altitude: <strong id="op-env-alt">1,500 m</strong></span>
+                        <span><i class="fa-solid fa-temperature-half" style="color:#d97706;"></i> Ambient Temp: <strong id="op-env-temp">15.0 °C</strong></span>
+                        <span><i class="fa-solid fa-gauge" style="color:#0284c7;"></i> Throttle: <strong id="op-env-throttle">75.0 %</strong></span>
+                        <span><i class="fa-solid fa-weight-hanging" style="color:#7c3aed;"></i> Engine Load: <strong id="op-env-load">70.0 %</strong></span>
+                    </div>
+                </div>
+
+                <!-- STATE PROGRESSION HORIZONTAL INDICATOR -->
+                <div id="state-progression-bar" class="state-progression-bar">
+                    <div class="sp-steps-row">
+                        <div class="sp-step NORMAL active" id="sp-step-NORMAL">1. NORMAL</div>
+                        <div class="sp-step WATCH" id="sp-step-WATCH">2. WATCH</div>
+                        <div class="sp-step CAUTION" id="sp-step-CAUTION">3. CAUTION</div>
+                        <div class="sp-step WARNING" id="sp-step-WARNING">4. WARNING</div>
+                        <div class="sp-step CRITICAL" id="sp-step-CRITICAL">5. CRITICAL</div>
+                    </div>
+                    <div class="sp-meta-row">
+                        <span>Previous State: <strong id="sp-prev">NORMAL</strong></span>
+                        <span>Current State: <strong id="sp-curr" class="text-green">NORMAL</strong></span>
+                        <span>Transition Reason: <span id="sp-reason">System operating within nominal baseline envelope</span></span>
+                        <span>Last Transition: <span id="sp-time">t=0.0s</span></span>
+                    </div>
+                </div>
+
+                <!-- SIMULATED FAULT INJECTION ACTIVE BANNER -->
+                <div id="simulated-fault-banner" class="simulated-fault-banner hidden">
+                    <span><i class="fa-solid fa-vial-circle-check text-orange"></i> <strong>SIMULATED FAULT INJECTION ACTIVE:</strong> Scenario: <strong id="s-fault-scenario">CYLINDER_THERMAL</strong> | Component: <strong id="s-fault-comp">CYLINDER_1</strong> | Profile: <strong id="s-fault-prof">GRADUAL</strong> | Effect: <strong id="s-fault-effect">45%</strong> | Elapsed: <strong id="s-fault-elapsed">22.5s</strong></span>
+                    <span class="badge-role op" style="font-size:0.7rem; background:#ffedd5; color:#c2410c;"><i class="fa-solid fa-triangle-exclamation"></i> Telemetry Physics Perturbation</span>
+                </div>
+
+                <!-- MAIN OPERATOR GRID -->
+                <div class="grid-3col">
+                    
+                    <!-- LEFT COLUMN: PREDICTIVE EARLY WARNING & GAUGES -->
+                    <div class="dash-col-left" style="display: flex; flex-direction: column; gap: 1.5rem;">
+                        
+                        <!-- PREDICTIVE EARLY WARNING PANEL -->
+                        <div id="predictive-early-warning-card" class="card glass-panel" style="border-left: 5px solid #059669; background: #f0fdf4; padding: 1.1rem;">
+                            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.6rem;">
+                                <h3 style="margin:0; color:#15803d; font-size:0.95rem; font-family:var(--font-display);"><i class="fa-solid fa-wand-magic-sparkles"></i> PREDICTIVE EARLY WARNING PANEL</h3>
+                                <div style="display:flex; gap:0.4rem; align-items:center;">
+                                    <span id="pew-warmup-badge" class="badge-role eng hidden" style="background:#e0f2fe; color:#0369a1; font-size:0.7rem;"><i class="fa-solid fa-hourglass-half"></i> FORECAST WARMING UP</span>
+                                    <span id="pew-model-source" class="badge-role op" style="background:#e0e7ff; color:#3730a3; font-size:0.7rem;"><i class="fa-solid fa-brain"></i> GRU Short-Horizon Model</span>
+                                    <span id="pew-status-badge" class="badge-state NORMAL" style="font-size:0.75rem;">NOMINAL</span>
+                                </div>
+                            </div>
+
+                            <div class="pew-grid">
+                                <div class="pew-item">
+                                    <div class="pew-item-lbl">Affected Subsystem</div>
+                                    <div class="pew-item-val" id="pew-subsystem">Thermal</div>
+                                </div>
+                                <div class="pew-item">
+                                    <div class="pew-item-lbl">Affected Component</div>
+                                    <div class="pew-item-val" id="pew-component">Cylinder Head 1</div>
+                                </div>
+                                <div class="pew-item">
+                                    <div class="pew-item-lbl">Predicted Failure Mode</div>
+                                    <div class="pew-item-val" id="pew-failure-mode">None</div>
+                                </div>
+                                <div class="pew-item">
+                                    <div class="pew-item-lbl">Current Value</div>
+                                    <div class="pew-item-val" id="pew-current-val">122.5 °C</div>
+                                </div>
+                                <div class="pew-item">
+                                    <div class="pew-item-lbl">Reference Envelope</div>
+                                    <div class="pew-item-val text-green" id="pew-ref-envelope">Inside Envelope (&lt;135°C)</div>
+                                </div>
+                                <div class="pew-item">
+                                    <div class="pew-item-lbl">Est. Time-to-Risk</div>
+                                    <div class="pew-item-val" id="pew-time-to-risk">N/A (Nominal)</div>
+                                </div>
+                                <div class="pew-item">
+                                    <div class="pew-item-lbl">GRU +10s Forecast</div>
+                                    <div class="pew-item-val" id="pew-10s">123.1 °C</div>
+                                </div>
+                                <div class="pew-item">
+                                    <div class="pew-item-lbl">GRU +30s Forecast</div>
+                                    <div class="pew-item-val" id="pew-30s">124.5 °C</div>
+                                </div>
+                                <div class="pew-item">
+                                    <div class="pew-item-lbl">GRU +60s Forecast</div>
+                                    <div class="pew-item-val" id="pew-60s">126.0 °C</div>
+                                </div>
+                            </div>
+
+                            <!-- VISUAL ALERT CALLOUT BOX -->
+                            <div id="pew-callout-box" class="pew-callout" style="border-left-color: #059669; background:#ffffff;">
+                                <div style="font-weight:700; color:#15803d; font-size:0.83rem;" id="pew-callout-title"><i class="fa-solid fa-circle-check"></i> Predictive Status: NOMINAL</div>
+                                <div style="font-size:0.78rem; color:#475569; margin-top:3px;" id="pew-callout-body">
+                                    Current parameters are inside reference envelope. GRU short-horizon trajectory forecasts predict stable flight behavior over the next 60 seconds.
+                                </div>
+                            </div>
+
+                            <!-- EVIDENCE SOURCES & STATE REASON -->
+                            <div style="margin-top:0.6rem; font-size:0.75rem; color:#475569; background:rgba(255,255,255,0.7); padding:6px 10px; border-radius:6px; border:1px solid #e2e8f0;">
+                                <div><strong>Evidence Sources:</strong> <span id="pew-evidence-list">GRU Forecast, Autoencoder Anomaly, CUSUM, Physics Residuals</span></div>
+                                <div style="margin-top:2px;"><strong>State Rationale:</strong> <span id="pew-reason-text">Nominal baseline state</span></div>
+                            </div>
+                        </div>
+
+                        <!-- SUBSYSTEM HEALTH PANEL -->
+                        <div class="card glass-panel">
+                            <h3 style="margin-top:0; margin-bottom:0.6rem;"><i class="fa-solid fa-cubes-stacked"></i> Subsystem Health Indices</h3>
+                            <div class="subsystem-grid">
+                                <div class="subsystem-card" id="subcard-thermal">
+                                    <div class="sub-title">Thermal</div>
+                                    <div class="sub-val text-green" id="subval-thermal">98%</div>
+                                    <span class="gauge-state-badge NORMAL" id="substate-thermal">NORMAL</span>
+                                    <div style="font-size:0.65rem; color:#64748b; margin-top:2px;" id="subtrend-thermal">Stable</div>
+                                </div>
+                                <div class="subsystem-card" id="subcard-lubrication">
+                                    <div class="sub-title">Lubrication</div>
+                                    <div class="sub-val text-green" id="subval-lubrication">99%</div>
+                                    <span class="gauge-state-badge NORMAL" id="substate-lubrication">NORMAL</span>
+                                    <div style="font-size:0.65rem; color:#64748b; margin-top:2px;" id="subtrend-lubrication">Stable</div>
+                                </div>
+                                <div class="subsystem-card" id="subcard-combustion">
+                                    <div class="sub-title">Combustion</div>
+                                    <div class="sub-val text-green" id="subval-combustion">97%</div>
+                                    <span class="gauge-state-badge NORMAL" id="substate-combustion">NORMAL</span>
+                                    <div style="font-size:0.65rem; color:#64748b; margin-top:2px;" id="subtrend-combustion">Stable</div>
+                                </div>
+                                <div class="subsystem-card" id="subcard-mechanical">
+                                    <div class="sub-title">Mechanical</div>
+                                    <div class="sub-val text-green" id="subval-mechanical">96%</div>
+                                    <span class="gauge-state-badge NORMAL" id="substate-mechanical">NORMAL</span>
+                                    <div style="font-size:0.65rem; color:#64748b; margin-top:2px;" id="subtrend-mechanical">Stable</div>
+                                </div>
+                                <div class="subsystem-card" id="subcard-electrical">
+                                    <div class="sub-title">Electrical</div>
+                                    <div class="sub-val text-green" id="subval-electrical">100%</div>
+                                    <span class="gauge-state-badge NORMAL" id="substate-electrical">NORMAL</span>
+                                    <div style="font-size:0.65rem; color:#64748b; margin-top:2px;" id="subtrend-electrical">Stable</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- TELEMETRY GAUGES CARD -->
+                        <div class="card glass-panel">
+                            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.4rem;">
+                                <h3 style="margin:0;"><i class="fa-solid fa-tachograph-digital"></i> Primary Flight & Engine Gauges</h3>
+                                <span id="provenance-telemetry-badge" class="badge-role eng" style="font-size:0.7rem; background:#e0f2fe; color:#0369a1; font-weight:700;">
+                                    <i class="fa-solid fa-server"></i> TELEMETRY SOURCE: Reference Aero-Piston Simulator (SIMULATED)
+                                </span>
+                            </div>
+                            <div id="provenance-telemetry-note" style="font-size:0.75rem; background:#f8fafc; border:1px solid #e2e8f0; border-radius:6px; padding:6px 10px; margin-bottom:1rem; color:#475569; line-height:1.4;">
+                                <i class="fa-solid fa-circle-info text-blue"></i> <strong>Data Provenance Notice:</strong> Canonical telemetry (RPM, CHT, EGT, Oil Press, Vibration) is sourced from the <strong>Reference Aero-Piston Physics Simulator</strong>. Selected Analytics Dataset (<strong id="provenance-dataset-name">NASA C-MAPSS FD001</strong>) drives RUL & AI prognostics models only (not physical CHT/oil gauges).
+                            </div>
+                            <div class="gauge-grid">
+                                <div class="gauge-box" id="gb-rpm">
+                                    <div style="display:flex; justify-content:space-between; align-items:center; width:100%;">
+                                        <span class="g-title">ENGINE SPEED</span>
+                                        <span class="gauge-state-badge NORMAL" id="gstate-rpm">NORMAL</span>
+                                    </div>
+                                    <div class="g-val" id="val-rpm">5000</div>
+                                    <span class="g-unit">RPM</span>
+                                </div>
+                                <div class="gauge-box" id="gb-oil-press">
+                                    <div style="display:flex; justify-content:space-between; align-items:center; width:100%;">
+                                        <span class="g-title">OIL PRESSURE</span>
+                                        <span class="gauge-state-badge NORMAL" id="gstate-oil-press">NORMAL</span>
+                                    </div>
+                                    <div class="g-val" id="val-oil-press">4.2</div>
+                                    <span class="g-unit">BAR</span>
+                                </div>
+                                <div class="gauge-box" id="gb-oil-temp">
+                                    <div style="display:flex; justify-content:space-between; align-items:center; width:100%;">
+                                        <span class="g-title">OIL TEMP</span>
+                                        <span class="gauge-state-badge NORMAL" id="gstate-oil-temp">NORMAL</span>
+                                    </div>
+                                    <div class="g-val" id="val-oil-temp">88.0</div>
+                                    <span class="g-unit">°C</span>
+                                </div>
+                                <div class="gauge-box" id="gb-fuel-flow">
+                                    <div style="display:flex; justify-content:space-between; align-items:center; width:100%;">
+                                        <span class="g-title">FUEL FLOW</span>
+                                        <span class="gauge-state-badge NORMAL" id="gstate-fuel-flow">NORMAL</span>
+                                    </div>
+                                    <div class="g-val" id="val-fuel-flow">17.5</div>
+                                    <span class="g-unit">L/HR</span>
+                                </div>
+                                <div class="gauge-box" id="gb-vibration">
+                                    <div style="display:flex; justify-content:space-between; align-items:center; width:100%;">
+                                        <span class="g-title">VIBRATION RMS</span>
+                                        <span class="gauge-state-badge NORMAL" id="gstate-vibration">NORMAL</span>
+                                    </div>
+                                    <div class="g-val" id="val-vibration">1.1</div>
+                                    <span class="g-unit">g</span>
+                                </div>
+                                <div class="gauge-box" id="gb-battery">
+                                    <div style="display:flex; justify-content:space-between; align-items:center; width:100%;">
+                                        <span class="g-title">BUS VOLTAGE</span>
+                                        <span class="gauge-state-badge NORMAL" id="gstate-battery">NORMAL</span>
+                                    </div>
+                                    <div class="g-val" id="val-battery">14.1</div>
+                                    <span class="g-unit">V</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- ACTIVE FAULTS & ALERT CONSOLE -->
+                        <div class="card glass-panel">
+                            <h3><i class="fa-solid fa-triangle-exclamation"></i> Active Fault & Diagnostics Console</h3>
+                            <div id="alerts-container" class="alerts-scroll-list">
+                                <div class="no-alerts"><i class="fa-solid fa-circle-check text-green"></i> All systems nominal. No active faults.</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- RIGHT COLUMN: PREDICTIVE PROJECTION CHART & REAL-TIME CHARTS -->
+                    <div class="dash-col-right" style="display: flex; flex-direction: column; gap: 1.5rem;">
+                        
+                        <!-- CURRENT VS FUTURE PROJECTION CHART -->
+                        <div class="card glass-panel" id="card-predictive-projection">
+                            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.5rem;">
+                                <h3 style="margin:0;"><i class="fa-solid fa-chart-line text-purple"></i> Current vs Future Projection (GRU Forecast)</h3>
+                                <div class="pred-param-controls" style="display:flex; gap:0.3rem; align-items:center;">
+                                    <span style="font-size:0.75rem; font-weight:700; color:var(--text-muted);">Channel:</span>
+                                    <button class="btn-pred-param active" data-param="cht1">CHT1</button>
+                                    <button class="btn-pred-param" data-param="cht2">CHT2</button>
+                                    <button class="btn-pred-param" data-param="cht3">CHT3</button>
+                                    <button class="btn-pred-param" data-param="cht4">CHT4</button>
+                                    <button class="btn-pred-param" data-param="oil_press">Oil Press</button>
+                                    <button class="btn-pred-param" data-param="oil_temp">Oil Temp</button>
+                                    <button class="btn-pred-param" data-param="vibration_rms">Vibration</button>
+                                </div>
+                            </div>
+                            <div style="font-size:0.72rem; color:var(--text-muted); margin-bottom:0.4rem; display:flex; justify-content:space-between;">
+                                <span><i class="fa-solid fa-timeline"></i> Observed History (solid) + PyTorch GRU +10s / +30s / +60s Forecast (dashed)</span>
+                                <span style="font-weight:700; color:#6b21a8;"><i class="fa-solid fa-microchip"></i> GRU — SIMULATED AERO-PISTON TRAJECTORIES</span>
+                            </div>
+                            <div class="chart-container" style="height: 220px;">
+                                <canvas id="chart-predictive-projection"></canvas>
+                            </div>
+                        </div>
+
+                        <!-- REAL-TIME TELEMETRY CHANNELS CHART -->
+                        <div class="card glass-panel">
+                            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.5rem;">
+                                <h3 style="margin:0;"><i class="fa-solid fa-chart-line"></i> Real-Time Telemetry Channels (10Hz)</h3>
+                                <div class="chart-window-controls" style="display:flex; gap:0.4rem; align-items:center;">
+                                    <span style="font-size:0.75rem; font-weight:700; color:var(--text-muted);">Window:</span>
+                                    <button class="btn-chart-win active" data-window="30">30s</button>
+                                    <button class="btn-chart-win" data-window="60">60s</button>
+                                    <button class="btn-chart-win" data-window="120">120s</button>
+                                </div>
+                            </div>
+                            <div class="chart-container" style="height: 220px;">
+                                <canvas id="chart-telemetry"></canvas>
+                            </div>
+                        </div>
+
+                        <!-- CYLINDER TEMPERATURE MATRIX -->
+                        <div class="grid-2col">
+                            <div class="card glass-panel">
+                                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.4rem;">
+                                    <h3 style="margin:0;"><i class="fa-solid fa-temperature-arrow-up"></i> Cylinder Head Temp (CHT 1-4)</h3>
+                                    <span style="font-size:0.65rem; background:#eff6ff; color:#1d4ed8; padding:2px 6px; border-radius:4px; font-weight:700;">
+                                        REFERENCE MODEL LIMIT: 145.0°C
+                                    </span>
+                                </div>
+                                <div class="cht-matrix">
+                                    <div class="cyl-bar-box" id="cylbox-cht1">
+                                        <div style="display:flex; justify-content:space-between; width:100%; font-size:0.7rem;">
+                                            <span>CYL 1</span>
+                                            <span class="cyl-state-badge NORMAL" id="state-cht1">NORMAL</span>
+                                        </div>
+                                        <div class="bar-fill" id="bar-cht1" style="height: 60%"></div>
+                                        <span class="bar-val" id="val-cht1">122°C</span>
+                                    </div>
+                                    <div class="cyl-bar-box" id="cylbox-cht2">
+                                        <div style="display:flex; justify-content:space-between; width:100%; font-size:0.7rem;">
+                                            <span>CYL 2</span>
+                                            <span class="cyl-state-badge NORMAL" id="state-cht2">NORMAL</span>
+                                        </div>
+                                        <div class="bar-fill" id="bar-cht2" style="height: 62%"></div>
+                                        <span class="bar-val" id="val-cht2">124°C</span>
+                                    </div>
+                                    <div class="cyl-bar-box" id="cylbox-cht3">
+                                        <div style="display:flex; justify-content:space-between; width:100%; font-size:0.7rem;">
+                                            <span>CYL 3</span>
+                                            <span class="cyl-state-badge NORMAL" id="state-cht3">NORMAL</span>
+                                        </div>
+                                        <div class="bar-fill" id="bar-cht3" style="height: 59%"></div>
+                                        <span class="bar-val" id="val-cht3">121°C</span>
+                                    </div>
+                                    <div class="cyl-bar-box" id="cylbox-cht4">
+                                        <div style="display:flex; justify-content:space-between; width:100%; font-size:0.7rem;">
+                                            <span>CYL 4</span>
+                                            <span class="cyl-state-badge NORMAL" id="state-cht4">NORMAL</span>
+                                        </div>
+                                        <div class="bar-fill" id="bar-cht4" style="height: 61%"></div>
+                                        <span class="bar-val" id="val-cht4">123°C</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="card glass-panel">
+                                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.4rem;">
+                                    <h3 style="margin:0;"><i class="fa-solid fa-fire-flame-curved"></i> Exhaust Gas Temp (EGT 1-4)</h3>
+                                    <span style="font-size:0.65rem; background:#eff6ff; color:#1d4ed8; padding:2px 6px; border-radius:4px; font-weight:700;">
+                                        REFERENCE MODEL LIMIT: 850.0°C
+                                    </span>
+                                </div>
+                                <div class="egt-matrix">
+                                    <div class="cyl-bar-box" id="cylbox-egt1">
+                                        <div style="display:flex; justify-content:space-between; width:100%; font-size:0.7rem;">
+                                            <span>CYL 1</span>
+                                            <span class="cyl-state-badge NORMAL" id="state-egt1">NORMAL</span>
+                                        </div>
+                                        <div class="bar-fill orange" id="bar-egt1" style="height: 75%"></div>
+                                        <span class="bar-val" id="val-egt1">745°C</span>
+                                    </div>
+                                    <div class="cyl-bar-box" id="cylbox-egt2">
+                                        <div style="display:flex; justify-content:space-between; width:100%; font-size:0.7rem;">
+                                            <span>CYL 2</span>
+                                            <span class="cyl-state-badge NORMAL" id="state-egt2">NORMAL</span>
+                                        </div>
+                                        <div class="bar-fill orange" id="bar-egt2" style="height: 76%"></div>
+                                        <span class="bar-val" id="val-egt2">750°C</span>
+                                    </div>
+                                    <div class="cyl-bar-box" id="cylbox-egt3">
+                                        <div style="display:flex; justify-content:space-between; width:100%; font-size:0.7rem;">
+                                            <span>CYL 3</span>
+                                            <span class="cyl-state-badge NORMAL" id="state-egt3">NORMAL</span>
+                                        </div>
+                                        <div class="bar-fill orange" id="bar-egt3" style="height: 74%"></div>
+                                        <span class="bar-val" id="val-egt3">742°C</span>
+                                    </div>
+                                    <div class="cyl-bar-box" id="cylbox-egt4">
+                                        <div style="display:flex; justify-content:space-between; width:100%; font-size:0.7rem;">
+                                            <span>CYL 4</span>
+                                            <span class="cyl-state-badge NORMAL" id="state-egt4">NORMAL</span>
+                                        </div>
+                                        <div class="bar-fill orange" id="bar-egt4" style="height: 75%"></div>
+                                        <span class="bar-val" id="val-egt4">748°C</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+
+            <!-- 2. 2D DIGITAL TWIN SCHEMATIC VIEW -->
+            <div id="view-digital-twin" class="tab-content">
+                <div class="grid-3col">
+                    <!-- LEFT COLUMN: INTERACTIVE 2D ENGINE SCHEMATIC -->
+                    <div class="card glass-panel col-span-2">
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.6rem;">
+                            <div>
+                                <h3 style="margin:0;"><i class="fa-solid fa-diagram-project"></i> REFERENCE AERO-PISTON ENGINE CORE</h3>
+                                <p style="margin:2px 0 0 0; font-size:0.78rem; color:var(--text-muted); font-weight:600;">4-Cylinder Turbocharged Reference Model — Interactive Subsystem Topology & Health State</p>
+                            </div>
+                            <span style="font-size:0.7rem; background:#f1f5f9; border:1px solid #cbd5e1; color:#475569; padding:4px 8px; border-radius:6px; font-weight:700;">
+                                <i class="fa-solid fa-hand-pointer"></i> Click component to inspect
+                            </span>
+                        </div>
+                        <div class="engine-schematic-container">
+                            <svg class="engine-svg" viewBox="0 0 800 440">
+                                <defs>
+                                    <filter id="glow-selected" x="-20%" y="-20%" width="140%" height="140%">
+                                        <feGaussianBlur stdDeviation="3" result="blur" />
+                                        <feComposite in="SourceGraphic" in2="blur" operator="over" />
+                                    </filter>
+                                </defs>
+
+                                <!-- CONCEPTUAL CONNECTION LINES / FLOW PATHS -->
+                                <!-- Turbo Intake Lines -->
+                                <path d="M 400 65 L 400 115" class="svg-flow-line" />
+                                <path d="M 310 42.5 L 185 42.5 L 185 100" class="svg-flow-line" />
+                                <path d="M 490 42.5 L 615 42.5 L 615 100" class="svg-flow-line" />
+                                
+                                <!-- Cylinder-to-Core Flow Lines -->
+                                <path d="M 250 137.5 L 270 137.5" class="svg-flow-line" />
+                                <path d="M 550 137.5 L 530 137.5" class="svg-flow-line" />
+                                <path d="M 250 247.5 L 270 247.5" class="svg-flow-line" />
+                                <path d="M 550 247.5 L 530 247.5" class="svg-flow-line" />
+                                
+                                <!-- Core-to-Subsystem Lines -->
+                                <path d="M 400 285 L 400 325" class="svg-flow-line" />
+                                <path d="M 310 260 L 185 260 L 185 325" class="svg-flow-line" />
+                                <path d="M 490 260 L 615 260 L 615 325" class="svg-flow-line" />
+
+                                <!-- 1. TURBO / INTAKE SYSTEM -->
+                                <g id="svg-comp-turbo" class="svg-subsystem" data-component="turbo">
+                                    <rect x="310" y="15" width="180" height="55" rx="10" class="svg-comp-rect" />
+                                    <text x="400" y="38" text-anchor="middle" class="svg-text-bold">TURBO / INTAKE</text>
+                                    <text x="400" y="55" text-anchor="middle" class="svg-temp" id="svg-val-turbo">MAP: 1.15 bar</text>
+                                </g>
+
+                                <!-- 2. CYLINDER 1 -->
+                                <g id="svg-comp-cyl1" class="svg-subsystem" data-component="cyl1">
+                                    <rect x="120" y="100" width="130" height="75" rx="10" class="svg-comp-rect" />
+                                    <text x="185" y="125" text-anchor="middle" class="svg-text-bold">CYLINDER 1</text>
+                                    <text x="185" y="145" text-anchor="middle" class="svg-temp" id="svg-val-cyl1">122°C</text>
+                                    <text x="185" y="162" text-anchor="middle" class="svg-text-sm" id="svg-state-cyl1">NORMAL</text>
+                                </g>
+
+                                <!-- 3. CYLINDER 2 -->
+                                <g id="svg-comp-cyl2" class="svg-subsystem" data-component="cyl2">
+                                    <rect x="550" y="100" width="130" height="75" rx="10" class="svg-comp-rect" />
+                                    <text x="615" y="125" text-anchor="middle" class="svg-text-bold">CYLINDER 2</text>
+                                    <text x="615" y="145" text-anchor="middle" class="svg-temp" id="svg-val-cyl2">124°C</text>
+                                    <text x="615" y="162" text-anchor="middle" class="svg-text-sm" id="svg-state-cyl2">NORMAL</text>
+                                </g>
+
+                                <!-- 4. ENGINE CORE -->
+                                <g id="svg-comp-core" class="svg-subsystem" data-component="core">
+                                    <rect x="270" y="115" width="260" height="170" rx="15" class="svg-comp-rect" />
+                                    <text x="400" y="145" text-anchor="middle" class="svg-text-bold" style="font-size:13px;">ENGINE CORE</text>
+                                    <text x="400" y="165" text-anchor="middle" class="svg-text-sm">4-Cyl Turbocharged</text>
+                                    <text x="400" y="195" text-anchor="middle" class="svg-temp" id="svg-val-core">5000 RPM | 62.5 kW</text>
+                                    <text x="400" y="220" text-anchor="middle" class="svg-text-sm" id="svg-hi-core">Overall HI: 98.0%</text>
+                                    <text x="400" y="245" text-anchor="middle" class="svg-text-sm" id="svg-state-core" style="font-weight:700;">NORMAL</text>
+                                </g>
+
+                                <!-- 5. CYLINDER 3 -->
+                                <g id="svg-comp-cyl3" class="svg-subsystem" data-component="cyl3">
+                                    <rect x="120" y="210" width="130" height="75" rx="10" class="svg-comp-rect" />
+                                    <text x="185" y="235" text-anchor="middle" class="svg-text-bold">CYLINDER 3</text>
+                                    <text x="185" y="255" text-anchor="middle" class="svg-temp" id="svg-val-cyl3">121°C</text>
+                                    <text x="185" y="272" text-anchor="middle" class="svg-text-sm" id="svg-state-cyl3">NORMAL</text>
+                                </g>
+
+                                <!-- 6. CYLINDER 4 -->
+                                <g id="svg-comp-cyl4" class="svg-subsystem" data-component="cyl4">
+                                    <rect x="550" y="210" width="130" height="75" rx="10" class="svg-comp-rect" />
+                                    <text x="615" y="235" text-anchor="middle" class="svg-text-bold">CYLINDER 4</text>
+                                    <text x="615" y="255" text-anchor="middle" class="svg-temp" id="svg-val-cyl4">123°C</text>
+                                    <text x="615" y="272" text-anchor="middle" class="svg-text-sm" id="svg-state-cyl4">NORMAL</text>
+                                </g>
+
+                                <!-- 7. OIL SYSTEM -->
+                                <g id="svg-comp-oil" class="svg-subsystem" data-component="oil">
+                                    <rect x="310" y="325" width="180" height="70" rx="10" class="svg-comp-rect" />
+                                    <text x="400" y="348" text-anchor="middle" class="svg-text-bold">OIL SYSTEM</text>
+                                    <text x="400" y="366" text-anchor="middle" class="svg-temp" id="svg-val-oil">4.20 BAR | 88.0°C</text>
+                                    <text x="400" y="382" text-anchor="middle" class="svg-text-sm" id="svg-state-oil">NORMAL</text>
+                                </g>
+
+                                <!-- 8. MECHANICAL / VIBRATION SUBSYSTEM -->
+                                <g id="svg-comp-mechanical" class="svg-subsystem" data-component="mechanical">
+                                    <rect x="90" y="325" width="190" height="70" rx="10" class="svg-comp-rect" />
+                                    <text x="185" y="348" text-anchor="middle" class="svg-text-bold">MECHANICAL / VIB</text>
+                                    <text x="185" y="366" text-anchor="middle" class="svg-temp" id="svg-val-mechanical">1.12 g (RMS)</text>
+                                    <text x="185" y="382" text-anchor="middle" class="svg-text-sm" id="svg-state-mechanical">NORMAL</text>
+                                </g>
+
+                                <!-- 9. ELECTRICAL SUBSYSTEM -->
+                                <g id="svg-comp-electrical" class="svg-subsystem" data-component="electrical">
+                                    <rect x="520" y="325" width="190" height="70" rx="10" class="svg-comp-rect" />
+                                    <text x="615" y="348" text-anchor="middle" class="svg-text-bold">ELECTRICAL BUS</text>
+                                    <text x="615" y="366" text-anchor="middle" class="svg-temp" id="svg-val-electrical">14.10 V</text>
+                                    <text x="615" y="382" text-anchor="middle" class="svg-text-sm" id="svg-state-electrical">NORMAL</text>
+                                </g>
+                            </svg>
+                        </div>
+                    </div>
+
+                    <!-- RIGHT COLUMN: INTERACTIVE COMPONENT DETAIL INSPECTOR & RESIDUAL TABLE -->
+                    <div style="display:flex; flex-direction:column; gap:1.25rem;">
+                        <!-- COMPONENT DETAIL INSPECTOR CARD -->
+                        <div class="card glass-panel" id="twin-component-detail-card" style="border-left: 5px solid var(--primary-blue);">
+                            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.75rem;">
+                                <h3 id="comp-detail-title" style="margin:0; font-size:0.95rem;"><i class="fa-solid fa-microchip"></i> Component Inspector: Cylinder 1</h3>
+                                <span id="comp-detail-state" class="gauge-state-badge NORMAL">NORMAL</span>
+                            </div>
+                            <div id="comp-detail-body" style="font-size:0.8rem; color:var(--text-secondary); line-height:1.6;">
+                                <!-- Rendered dynamically by app.js -->
+                            </div>
+                        </div>
+
+                        <!-- DIGITAL TWIN RESIDUAL COMPARISON TABLE & ROLLING TREND CHART -->
+                        <div class="card glass-panel">
+                            <h3 style="margin-top:0; margin-bottom:0.4rem;"><i class="fa-solid fa-code-compare"></i> Physical vs Virtual Model Residuals</h3>
+                            <div style="font-size:0.75rem; background:#eff6ff; border:1px solid #bfdbfe; color:#1e40af; padding:8px 10px; border-radius:6px; margin-bottom:0.75rem; line-height:1.4;">
+                                <i class="fa-solid fa-circle-info"></i> Observed telemetry is compared against the reference physics model; persistent residual excursions contribute diagnostic evidence.
+                            </div>
+                            <table class="residual-table" style="font-size:0.75rem;">
+                                <thead>
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Observed (Type)</th>
+                                        <th>Predicted</th>
+                                        <th>Residual Δ</th>
+                                        <th>Band</th>
+                                        <th>Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td>Power (kW)</td>
+                                        <td><span id="res-act-power">62.5 kW</span> <br><small style="color:#64748b; font-size:0.65rem;">(Telemetry-Derived Estimate)</small></td>
+                                        <td id="res-phy-power">62.1 kW</td>
+                                        <td id="res-delta-power" class="text-green">+0.4</td>
+                                        <td>± 5.0 kW</td>
+                                        <td><span id="status-power" class="gauge-state-badge NORMAL">NORMAL</span></td>
+                                    </tr>
+                                    <tr>
+                                        <td>Avg CHT (°C)</td>
+                                        <td><span id="res-act-cht">122.5 °C</span> <br><small style="color:#64748b; font-size:0.65rem;">(Direct Telemetry)</small></td>
+                                        <td id="res-phy-cht">121.0 °C</td>
+                                        <td id="res-delta-cht" class="text-green">+1.5</td>
+                                        <td>± 8.0 °C</td>
+                                        <td><span id="status-cht" class="gauge-state-badge NORMAL">NORMAL</span></td>
+                                    </tr>
+                                    <tr>
+                                        <td>Avg EGT (°C)</td>
+                                        <td><span id="res-act-egt">747.0 °C</span> <br><small style="color:#64748b; font-size:0.65rem;">(Direct Telemetry)</small></td>
+                                        <td id="res-phy-egt">742.0 °C</td>
+                                        <td id="res-delta-egt" class="text-green">+5.0</td>
+                                        <td>± 25.0 °C</td>
+                                        <td><span id="status-egt" class="gauge-state-badge NORMAL">NORMAL</span></td>
+                                    </tr>
+                                    <tr>
+                                        <td>Oil Press (bar)</td>
+                                        <td><span id="res-act-oil">4.20 bar</span> <br><small style="color:#64748b; font-size:0.65rem;">(Direct Telemetry)</small></td>
+                                        <td id="res-phy-oil">4.25 bar</td>
+                                        <td id="res-delta-oil" class="text-green">-0.05</td>
+                                        <td>± 0.40 bar</td>
+                                        <td><span id="status-oil" class="gauge-state-badge NORMAL">NORMAL</span></td>
+                                    </tr>
+                                    <tr>
+                                        <td>Oil Temp (°C)</td>
+                                        <td><span id="res-act-oil-t">88.0 °C</span> <br><small style="color:#64748b; font-size:0.65rem;">(Direct Telemetry)</small></td>
+                                        <td id="res-phy-oil-t">86.5 °C</td>
+                                        <td id="res-delta-oil-t" class="text-green">+1.5</td>
+                                        <td>± 5.0 °C</td>
+                                        <td><span id="status-oil-t" class="gauge-state-badge NORMAL">NORMAL</span></td>
+                                    </tr>
+                                </tbody>
+                            </table>
+
+                            <!-- ROLLING RESIDUAL EXCURSION TREND CHART -->
+                            <div style="margin-top:0.85rem; border-top:1px solid var(--border-light); padding-top:0.65rem;">
+                                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.35rem;">
+                                    <h4 style="margin:0; font-size:0.8rem; font-family:var(--font-display);"><i class="fa-solid fa-chart-line"></i> Rolling Residual Excursion Trends (10Hz)</h4>
+                                    <span style="font-size:0.65rem; color:var(--text-muted); font-weight:600;">Residual = Observed − Predicted</span>
+                                </div>
+                                <div style="height:140px;">
+                                    <canvas id="chart-residuals"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+
+            <!-- 3. FAULT INJECTION & ANALYTICS (ENGINEER ONLY) -->
+            <div id="view-engineer" class="tab-content">
+                <!-- SIMULATED FAULT INJECTION ACTIVE BANNER (INJECTED CONDITION) -->
+                <div id="simulated-fault-banner-eng" class="card glass-panel hidden" style="border-left:5px solid #ea580c; background:#fff7ed; margin-bottom:1.2rem; padding:0.75rem 1rem;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5rem;">
+                        <div>
+                            <h4 style="margin:0; color:#c2410c; font-size:0.9rem; font-family:var(--font-display);">
+                                <i class="fa-solid fa-play text-orange"></i> SIMULATED FAULT INJECTION ACTIVE — Injected Condition Parameters
+                            </h4>
+                            <div style="font-size:0.78rem; color:#9a3412; margin-top:2px; font-weight:600;">
+                                Scenario: <span id="eng-fault-scenario">CYLINDER_THERMAL</span> | 
+                                Component: <strong id="eng-fault-comp">CYLINDER_1</strong> | 
+                                Profile: <span id="eng-fault-prof">GRADUAL</span> | 
+                                Effect: <strong id="eng-fault-effect">100%</strong> | 
+                                Elapsed: <span id="eng-fault-elapsed">0.0s</span>
+                            </div>
+                        </div>
+                        <span class="badge-role eng" style="font-size:0.7rem; background:#ffedd5; color:#c2410c; border:1px solid #fed7aa; padding:4px 8px; border-radius:6px; font-weight:700;">
+                            <i class="fa-solid fa-flask"></i> SIMULATED INJECTION PARAMETER (Separate from AI Diagnosis)
+                        </span>
+                    </div>
+                </div>
+
+                <div class="grid-2col" style="gap:1.5rem;">
+                    
+                    <!-- LEFT COLUMN: INTERACTIVE FAULT INJECTION PANEL -->
+                    <div class="card glass-panel">
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.5rem;">
+                            <h3 style="margin:0;"><i class="fa-solid fa-flask text-orange"></i> SIMULATED FAULT INJECTION</h3>
+                            <span class="badge-role op" style="font-size:0.7rem; background:#fff7ed; color:#c2410c; font-weight:700;">
+                                <i class="fa-solid fa-triangle-exclamation"></i> Telemetry Physics Bias Generator
+                            </span>
+                        </div>
+                        <p class="panel-desc" style="font-size:0.8rem; color:var(--text-muted); margin-bottom:0.85rem; line-height:1.4;">
+                            Perturbs raw simulator physics inputs ONLY. Existing Digital Twin physics residuals, PyTorch autoencoder, XGBoost, and 5-state machine detect anomalies independently.
+                        </p>
+                        
+                        <!-- FAULT SCENARIO CONFIGURATION FORM -->
+                        <div style="background:#f8fafc; border:1px solid var(--border-light); border-radius:10px; padding:0.85rem; margin-bottom:1rem; display:grid; grid-template-columns: 1fr 1fr; gap:0.75rem; font-size:0.8rem;">
+                            <div>
+                                <label style="font-weight:700; color:var(--text-secondary); display:block; margin-bottom:4px;">Fault Scenario:</label>
+                                <select id="select-fault-scenario" style="width:100%; padding:0.4rem; border-radius:6px; border:1px solid var(--border-light); background:#ffffff; font-weight:600;">
+                                    <option value="CYLINDER_THERMAL" selected>Cylinder Thermal Degradation</option>
+                                    <option value="OIL_PRESSURE">Oil-Pressure Degradation</option>
+                                    <option value="INCREASING_VIBRATION">Increasing Mechanical Vibration</option>
+                                    <option value="SENSOR_DRIFT">Sensor Drift (Electrical Bus)</option>
+                                    <option value="INTERMITTENT_COMBUSTION">Intermittent Combustion Disturbance</option>
+                                    <option value="INJECTOR_DISTURBANCE">Fuel Injector Abnormality</option>
+                                </select>
+                            </div>
+
+                            <div>
+                                <label style="font-weight:700; color:var(--text-secondary); display:block; margin-bottom:4px;">Affected Component:</label>
+                                <select id="select-fault-component" style="width:100%; padding:0.4rem; border-radius:6px; border:1px solid var(--border-light); background:#ffffff; font-weight:600;">
+                                    <option value="CYLINDER_1" selected>Cylinder 1 (CHT1 / EGT1)</option>
+                                    <option value="CYLINDER_2">Cylinder 2 (CHT2 / EGT2)</option>
+                                    <option value="CYLINDER_3">Cylinder 3 (CHT3 / EGT3)</option>
+                                    <option value="CYLINDER_4">Cylinder 4 (CHT4 / EGT4)</option>
+                                    <option value="OIL_SYSTEM">Lubrication System (Oil Press / Temp)</option>
+                                    <option value="MECHANICAL_BEARING">Mechanical Bearing (Vibration RMS)</option>
+                                    <option value="ELECTRICAL_BUS">Electrical Bus (Battery Voltage)</option>
+                                </select>
+                            </div>
+
+                            <div>
+                                <label style="font-weight:700; color:var(--text-secondary); display:block; margin-bottom:4px;">Injection Profile:</label>
+                                <select id="select-fault-profile" style="width:100%; padding:0.4rem; border-radius:6px; border:1px solid var(--border-light); background:#ffffff; font-weight:600;">
+                                    <option value="GRADUAL" selected>Gradual Ramp (Linear / Exponential)</option>
+                                    <option value="SUDDEN">Sudden Step Change</option>
+                                    <option value="INTERMITTENT">Intermittent Pulsed Disturbance</option>
+                                </select>
+                            </div>
+
+                            <div>
+                                <label style="font-weight:700; color:var(--text-secondary); display:block; margin-bottom:4px;">Progression Rate:</label>
+                                <select id="select-fault-rate" style="width:100%; padding:0.4rem; border-radius:6px; border:1px solid var(--border-light); background:#ffffff; font-weight:600;">
+                                    <option value="MODERATE" selected>Moderate Progression (15s Ramp)</option>
+                                    <option value="SLOW">Slow Progression (30s Ramp)</option>
+                                    <option value="FAST">Fast Progression (5s Ramp)</option>
+                                </select>
+                            </div>
+
+                            <div class="col-span-2">
+                                <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+                                    <label style="font-weight:700; color:var(--text-secondary);">Injection Intensity:</label>
+                                    <span id="val-fault-intensity-disp" style="font-weight:800; color:var(--primary-blue);">100%</span>
+                                </div>
+                                <input type="range" id="slider-fault-intensity" min="0.2" max="2.0" step="0.1" value="1.0" style="width:100%; cursor:pointer;">
+                            </div>
+                        </div>
+
+                        <!-- ACTION CONTROL BUTTONS -->
+                        <div style="display:flex; gap:0.6rem; flex-wrap:wrap; margin-bottom:1.2rem;">
+                            <button id="btn-start-fault" class="btn btn-primary btn-glow" style="flex:2;"><i class="fa-solid fa-play"></i> Start Fault Injection</button>
+                            <button id="btn-pause-fault" class="btn btn-secondary" style="flex:1;"><i class="fa-solid fa-pause"></i> Pause / Resume</button>
+                            <button id="btn-clear-fault" class="btn btn-success" style="flex:1.5;"><i class="fa-solid fa-rotate-left"></i> Clear All Faults</button>
+                        </div>
+
+                        <!-- SIMULATED FAULT EVENT LOG TABLE -->
+                        <div style="border-top:1px solid var(--border-light); padding-top:0.85rem;">
+                            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.4rem;">
+                                <h4 style="margin:0; font-size:0.85rem; font-family:var(--font-display);"><i class="fa-solid fa-list-check"></i> Simulated Fault Event Log</h4>
+                                <span style="font-size:0.68rem; color:var(--text-muted); font-weight:700;">Live Audit Trail</span>
+                            </div>
+                            <table class="residual-table" style="font-size:0.75rem;">
+                                <thead>
+                                    <tr>
+                                        <th>Fault Scenario</th>
+                                        <th>Start Time</th>
+                                        <th>Affected Input</th>
+                                        <th>Profile</th>
+                                        <th>Intensity / Rate</th>
+                                        <th>Status / Cleared</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="fault-event-log-body">
+                                    <tr><td colspan="6" style="text-align:center; color:var(--text-muted);">No active simulated fault injections logged. System operating in nominal baseline.</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- RIGHT COLUMN: LIVE AI ANALYTICS & FAULT PROGRESSION GRAPH -->
+                    <div style="display:flex; flex-direction:column; gap:1.25rem;">
+                        <!-- LIVE AI ANALYTICS & PREDICTIVE EVIDENCE CARD -->
+                        <div class="card glass-panel" style="border-left:5px solid var(--primary-blue);">
+                            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.65rem;">
+                                <h3 style="margin:0; font-size:0.95rem;"><i class="fa-solid fa-brain text-purple"></i> AI Analytics & Diagnostic Engine</h3>
+                                <span id="eng-ai-status-badge" class="badge-state NORMAL">NOMINAL</span>
+                            </div>
+                            
+                            <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.6rem; font-size:0.78rem; background:#f8fafc; padding:0.75rem; border-radius:8px; border:1px solid var(--border-light); margin-bottom:0.75rem;">
+                                <div><strong>Autoencoder Score:</strong> <span id="eng-ae-score" style="font-family:var(--font-mono); font-weight:700;">0.015</span></div>
+                                <div><strong>Autoencoder Trend:</strong> <span id="eng-ae-trend" style="font-weight:600;" class="text-green">Stable</span></div>
+                                <div><strong>CUSUM State:</strong> <span id="eng-cusum-state" class="gauge-state-badge NORMAL">NORMAL</span></div>
+                                <div><strong>Physics Residual:</strong> <span id="eng-residual-val" style="font-family:var(--font-mono); font-weight:700;">+1.5 °C</span></div>
+                                <div><strong>Residual Trend:</strong> <span id="eng-residual-trend" style="font-weight:600;">Stable</span></div>
+                                <div><strong>Predictive Risk Score:</strong> <span id="eng-risk-score" style="font-family:var(--font-mono); font-weight:700;">0.00 / 1.0</span></div>
+                                <div><strong>Est. Time-to-Risk:</strong> <span id="eng-ttr" style="font-weight:600;">N/A (Nominal)</span></div>
+                                <div><strong>Failure Mode:</strong> <span id="eng-failure-mode" style="font-weight:600;">None</span></div>
+                            </div>
+
+                            <!-- GRU SHORT-HORIZON FORECAST READOUTS -->
+                            <div style="border-top:1px solid var(--border-light); padding-top:0.6rem; margin-bottom:0.75rem;">
+                                <div style="display:flex; justify-content:space-between; font-size:0.75rem; margin-bottom:4px; font-weight:700; color:var(--text-secondary);">
+                                    <span><i class="fa-solid fa-chart-line text-purple"></i> GRU Trajectory Forecast:</span>
+                                    <span id="eng-forecast-mode" style="font-size:0.68rem; color:#64748b;">GRU Short-Horizon Model</span>
+                                </div>
+                                <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:0.4rem; font-size:0.75rem; text-align:center;">
+                                    <div style="background:#f1f5f9; padding:4px; border-radius:6px;">
+                                        <small style="display:block; color:#64748b;">+10s Forecast</small>
+                                        <strong id="eng-fc-10s">122.5 °C</strong>
+                                    </div>
+                                    <div style="background:#f1f5f9; padding:4px; border-radius:6px;">
+                                        <small style="display:block; color:#64748b;">+30s Forecast</small>
+                                        <strong id="eng-fc-30s">123.0 °C</strong>
+                                    </div>
+                                    <div style="background:#f1f5f9; padding:4px; border-radius:6px;">
+                                        <small style="display:block; color:#64748b;">+60s Forecast</small>
+                                        <strong id="eng-fc-60s">123.5 °C</strong>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- 5-SUBSYSTEM HEALTH INDEX BREAKDOWN -->
+                            <div style="border-top:1px solid var(--border-light); padding-top:0.6rem;">
+                                <h4 style="margin:0 0 0.5rem 0; font-size:0.8rem; font-family:var(--font-display);"><i class="fa-solid fa-chart-pie"></i> 5-Subsystem Health Breakdown</h4>
+                                <div class="subsystem-bars">
+                                    <div class="sub-bar-group">
+                                        <label>THERMAL SUBSYSTEM</label>
+                                        <div class="progress-bar"><div class="progress-fill" id="hi-thermal" style="width: 98%"></div></div>
+                                        <span class="pct" id="pct-thermal">98.0%</span>
+                                    </div>
+                                    <div class="sub-bar-group">
+                                        <label>LUBRICATION SUBSYSTEM</label>
+                                        <div class="progress-bar"><div class="progress-fill" id="hi-lubrication" style="width: 99%"></div></div>
+                                        <span class="pct" id="pct-lubrication">99.0%</span>
+                                    </div>
+                                    <div class="sub-bar-group">
+                                        <label>COMBUSTION SUBSYSTEM</label>
+                                        <div class="progress-bar"><div class="progress-fill" id="hi-combustion" style="width: 97%"></div></div>
+                                        <span class="pct" id="pct-combustion">97.0%</span>
+                                    </div>
+                                    <div class="sub-bar-group">
+                                        <label>ELECTRICAL SUBSYSTEM</label>
+                                        <div class="progress-bar"><div class="progress-fill" id="hi-electrical" style="width: 100%"></div></div>
+                                        <span class="pct" id="pct-electrical">100.0%</span>
+                                    </div>
+                                    <div class="sub-bar-group">
+                                        <label>MECHANICAL SUBSYSTEM</label>
+                                        <div class="progress-bar"><div class="progress-fill" id="hi-mechanical" style="width: 96%"></div></div>
+                                        <span class="pct" id="pct-mechanical">96.0%</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- EXPLAINABLE AI ADVISORY -->
+                            <div class="xai-box margin-top">
+                                <h4><i class="fa-solid fa-brain"></i> XAI Autonomous Maintenance Advisory:</h4>
+                                <p id="xai-advisory-text" class="xai-text">System operating within normal nominal parameters.</p>
+                            </div>
+                        </div>
+
+                        <!-- FAULT PROGRESSION GRAPH CARD -->
+                        <div class="card glass-panel">
+                            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.4rem;">
+                                <h3 style="margin:0; font-size:0.9rem;"><i class="fa-solid fa-chart-area text-orange"></i> Live Fault Progression Graph</h3>
+                                <span style="font-size:0.68rem; color:var(--text-muted); font-weight:600;">Real TwinSession Telemetry & Forecast</span>
+                            </div>
+                            <div style="height:170px;">
+                                <canvas id="chart-fault-progression"></canvas>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+
+            <!-- 4. MISSION REPLAY & REPORTS VIEW -->
+            <div id="view-replay" class="tab-content">
+                <!-- HISTORICAL REPLAY MODE DEMARCATION BANNER -->
+                <div style="background: linear-gradient(90deg, #0f172a, #1e293b); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.4); border-radius: 8px; padding: 0.65rem 1rem; margin-bottom: 1.2rem; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 4px 12px rgba(0,0,0,0.15);">
+                    <div style="display: flex; align-items: center; gap: 0.75rem;">
+                        <span style="background: #0284c7; color: #ffffff; padding: 3px 9px; border-radius: 4px; font-weight: 800; font-size: 0.72rem; letter-spacing: 0.5px;">HISTORICAL REPLAY MODE</span>
+                        <span style="font-size: 0.8rem; color: #94a3b8;">Reconstructing authentic recorded TwinSession snapshot stream from database (Read Only — Isolated from Live Twin)</span>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 0.6rem;">
+                        <label style="font-size: 0.78rem; font-weight: 700; color: #cbd5e1;"><i class="fa-solid fa-list-check"></i> Recorded Mission:</label>
+                        <select id="select-replay-mission" style="padding: 0.35rem 0.6rem; border-radius: 6px; border: 1px solid #475569; font-size: 0.78rem; font-weight: 700; background: #1e293b; color: #f8fafc;">
+                            <option value="latest">Loading Recorded Missions...</option>
+                        </select>
+                        <button id="btn-start-new-mission" class="btn btn-secondary btn-sm" style="padding: 0.35rem 0.6rem; font-size: 0.75rem;"><i class="fa-solid fa-plus"></i> New Mission</button>
+                    </div>
+                </div>
+
+                <div class="grid-3col" style="gap:1.5rem;">
+                    
+                    <!-- REPLAY SCRUBBER & HISTORICAL DATA PIPELINE -->
+                    <div class="card glass-panel col-span-2">
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.6rem;">
+                            <div>
+                                <h3 style="margin:0;"><i class="fa-solid fa-film text-blue"></i> Historical Mission Replay & Digital Twin Reconstruction</h3>
+                                <p style="margin:2px 0 0 0; font-size:0.78rem; color:var(--text-muted); font-weight:600;">
+                                    Reconstructs authentic recorded telemetry, state transitions, ML diagnostics, and GRU forecasts frame-by-frame.
+                                </p>
+                            </div>
+                            <span id="replay-time-display" style="font-size:0.85rem; font-weight:800; font-family:var(--font-mono); color:var(--primary-blue); background:#eff6ff; padding:4px 10px; border-radius:8px; border:1px solid #bfdbfe;">
+                                Frame 1 / 1 (0.0s)
+                            </span>
+                        </div>
+
+                        <!-- REPLAY CONTROL BAR -->
+                        <div class="replay-controls" style="display:flex; gap:0.75rem; align-items:center; flex-wrap:wrap; margin-bottom:0.85rem; background:#f8fafc; padding:0.75rem; border-radius:10px; border:1px solid var(--border-light);">
+                            <button id="btn-replay-play" class="btn btn-primary btn-sm"><i class="fa-solid fa-play"></i> Play</button>
+                            <button id="btn-replay-pause" class="btn btn-secondary btn-sm"><i class="fa-solid fa-pause"></i> Pause</button>
+                            <button id="btn-replay-restart" class="btn btn-secondary btn-sm"><i class="fa-solid fa-rotate-left"></i> Restart</button>
+                            
+                            <div style="display:flex; align-items:center; gap:0.4rem; margin-left:auto;">
+                                <label style="font-size:0.78rem; font-weight:700; color:var(--text-secondary);"><i class="fa-solid fa-gauge-high"></i> Speed:</label>
+                                <select id="select-replay-speed" style="padding:0.35rem 0.6rem; border-radius:6px; border:1px solid var(--border-light); font-size:0.8rem; font-weight:700; background:#ffffff;">
+                                    <option value="0.5">0.5x Speed</option>
+                                    <option value="1">1x (10Hz)</option>
+                                    <option value="2">2x Speed</option>
+                                    <option value="5" selected>5x Speed</option>
+                                    <option value="10">10x Speed</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <!-- TIMELINE TRACK WITH EVENT MARKERS -->
+                        <div style="margin-bottom:0.5rem;">
+                            <div style="display:flex; justify-content:space-between; align-items:center; font-size:0.72rem; color:var(--text-muted); font-weight:700; margin-bottom:2px;">
+                                <span><i class="fa-solid fa-timeline"></i> Recorded Event Timeline Markers (Click dot to seek):</span>
+                                <span style="display:flex; gap:8px;">
+                                    <span style="color:#0284c7;">● WATCH</span>
+                                    <span style="color:#d97706;">● CAUTION</span>
+                                    <span style="color:#ea580c;">● WARNING</span>
+                                    <span style="color:#dc2626;">● CRITICAL</span>
+                                    <span style="color:#7c3aed;">● DIAGNOSTIC</span>
+                                </span>
+                            </div>
+                            <div id="replay-timeline-markers" class="replay-timeline-track"></div>
+                            <input type="range" id="replay-scrubber" min="0" max="0" value="0" step="1" style="width:100%; cursor:pointer;">
+                        </div>
+
+                        <!-- SIMULATED MISSION PHASE BANNER -->
+                        <div style="background:#eff6ff; border-left:4px solid #2563eb; padding:0.6rem 0.85rem; border-radius:6px; margin-bottom:1rem; display:flex; justify-content:space-between; align-items:center;">
+                            <span id="replay-mission-stage" style="font-size:0.82rem; font-weight:700; color:#1e40af;">
+                                <i class="fa-solid fa-plane-departure"></i> RECORDED SCENARIO: CRUISE
+                            </span>
+                            <span id="replay-state-badge" class="badge-state NORMAL">NORMAL</span>
+                        </div>
+
+                        <!-- SNAPSHOT RECONSTRUCTION TELEMETRY READOUT GRID -->
+                        <div style="display:grid; grid-template-columns: repeat(4, 1fr); gap:0.6rem; margin-bottom:1rem;">
+                            <div style="background:#ffffff; padding:0.6rem; border-radius:8px; border:1px solid var(--border-light); text-align:center;">
+                                <span style="font-size:0.68rem; color:var(--text-muted); font-weight:700; display:block;">ENGINE SPEED</span>
+                                <strong id="replay-val-rpm" style="font-size:1.1rem; color:var(--text-primary); font-family:var(--font-mono);">5000 RPM</strong>
+                            </div>
+                            <div style="background:#ffffff; padding:0.6rem; border-radius:8px; border:1px solid var(--border-light); text-align:center;">
+                                <span style="font-size:0.68rem; color:var(--text-muted); font-weight:700; display:block;">AVG CHT</span>
+                                <strong id="replay-val-cht" style="font-size:1.1rem; color:var(--hud-green); font-family:var(--font-mono);">120.0 °C</strong>
+                            </div>
+                            <div style="background:#ffffff; padding:0.6rem; border-radius:8px; border:1px solid var(--border-light); text-align:center;">
+                                <span style="font-size:0.68rem; color:var(--text-muted); font-weight:700; display:block;">OIL PRESSURE</span>
+                                <strong id="replay-val-oil-p" style="font-size:1.1rem; color:var(--hud-gold); font-family:var(--font-mono);">4.20 bar</strong>
+                            </div>
+                            <div style="background:#ffffff; padding:0.6rem; border-radius:8px; border:1px solid var(--border-light); text-align:center;">
+                                <span style="font-size:0.68rem; color:var(--text-muted); font-weight:700; display:block;">PROTOTYPE RUL</span>
+                                <strong id="replay-val-rul" style="font-size:1.1rem; color:var(--primary-blue); font-family:var(--font-mono);">210.0 cycles</strong>
+                            </div>
+                        </div>
+
+                        <!-- HISTORICAL GRU FORECAST READOUTS -->
+                        <div id="replay-forecast-container" style="background:#f8fafc; border:1px solid var(--border-light); border-radius:8px; padding:0.6rem 0.85rem; margin-bottom:1rem; font-size:0.75rem;">
+                            <div style="display:flex; justify-content:space-between; font-weight:700; color:var(--text-secondary); margin-bottom:4px;">
+                                <span><i class="fa-solid fa-brain text-purple"></i> Historical GRU Trajectory Forecast (at Frame <span id="replay-fc-frame">1</span>):</span>
+                                <span id="replay-fc-status" style="font-size:0.68rem; color:#64748b;">Historical Model Inference</span>
+                            </div>
+                            <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:0.4rem; text-align:center;">
+                                <div style="background:#ffffff; padding:4px; border-radius:6px; border:1px solid #e2e8f0;">
+                                    <small style="display:block; color:#64748b;">+10s Forecast</small>
+                                    <strong id="replay-fc-10s">120.0 °C</strong>
+                                </div>
+                                <div style="background:#ffffff; padding:4px; border-radius:6px; border:1px solid #e2e8f0;">
+                                    <small style="display:block; color:#64748b;">+30s Forecast</small>
+                                    <strong id="replay-fc-30s">120.0 °C</strong>
+                                </div>
+                                <div style="background:#ffffff; padding:4px; border-radius:6px; border:1px solid #e2e8f0;">
+                                    <small style="display:block; color:#64748b;">+60s Forecast</small>
+                                    <strong id="replay-fc-60s">120.0 °C</strong>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- HISTORICAL ACTIVE FAULTS READOUT -->
+                        <div id="replay-active-faults-container" style="background:#fff7ed; border-left:4px solid #ea580c; padding:0.6rem 0.85rem; border-radius:6px; margin-bottom:1rem; font-size:0.78rem;">
+                            <div style="font-weight:700; color:#c2410c; margin-bottom:2px;"><i class="fa-solid fa-triangle-exclamation"></i> Historical Active Injections:</div>
+                            <div id="replay-active-faults-body" style="color:#9a3412;">None active at this timestamp.</div>
+                        </div>
+
+                        <!-- DIAGNOSTIC EVIDENCE & ADVISORIES AT THIS REPLAY POINT -->
+                        <div class="xai-box" style="background:#f8fafc; border-left:4px solid #7c3aed;">
+                            <h4 style="color:#5b21b6; font-size:0.85rem; margin:0 0 6px 0;">
+                                <i class="fa-solid fa-microscope text-purple"></i> Reconstructed Diagnostics & Advisories at Frame <span id="replay-frame-num">1</span>:
+                            </h4>
+                            <div id="replay-diagnostics-body" style="font-size:0.8rem; color:var(--text-secondary); line-height:1.5;">
+                                <i class="fa-solid fa-circle-check text-green"></i> System operating in nominal state. No active fault evidence detected at this timestamp.
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- PROTOTYPE MISSION HEALTH SUMMARY REPORT CARD -->
+                    <div class="card glass-panel">
+                        <h3><i class="fa-solid fa-file-invoice text-blue"></i> Prototype Mission Health Summary</h3>
+                        <p class="panel-desc" style="font-size:0.8rem; color:var(--text-muted); margin-bottom:0.85rem;">
+                            Ground crew summary report calculated from authentic recorded flight telemetry.
+                        </p>
+
+                        <!-- REPORT SUMMARY STATISTICS GRID -->
+                        <div style="background:#f8fafc; border:1px solid var(--border-light); border-radius:10px; padding:0.85rem; margin-bottom:1rem; font-size:0.78rem;">
+                            <div style="display:flex; justify-content:space-between; margin-bottom:6px; border-bottom:1px solid #e2e8f0; padding-bottom:4px;">
+                                <span style="color:var(--text-muted);">Mission ID:</span>
+                                <strong id="rep-mission-id" style="font-family:var(--font-mono); color:var(--primary-blue);">MIS-20260920-001</strong>
+                            </div>
+                            <div style="display:flex; justify-content:space-between; margin-bottom:6px; border-bottom:1px solid #e2e8f0; padding-bottom:4px;">
+                                <span style="color:var(--text-muted);">Data Source:</span>
+                                <strong id="rep-data-source">Simulator & C-MAPSS</strong>
+                            </div>
+                            <div style="display:flex; justify-content:space-between; margin-bottom:6px; border-bottom:1px solid #e2e8f0; padding-bottom:4px;">
+                                <span style="color:var(--text-muted);">Replay Duration:</span>
+                                <strong id="rep-duration">0.0s (0 frames)</strong>
+                            </div>
+                            <div style="display:flex; justify-content:space-between; margin-bottom:6px; border-bottom:1px solid #e2e8f0; padding-bottom:4px;">
+                                <span style="color:var(--text-muted);">Min Health Index:</span>
+                                <strong id="rep-min-hi" class="text-green">100.0%</strong>
+                            </div>
+                            <div style="display:flex; justify-content:space-between; margin-bottom:6px; border-bottom:1px solid #e2e8f0; padding-bottom:4px;">
+                                <span style="color:var(--text-muted);">Max Anomaly Score:</span>
+                                <strong id="rep-max-anomaly" class="text-green">0.000</strong>
+                            </div>
+                            <div style="display:flex; justify-content:space-between; margin-bottom:6px; border-bottom:1px solid #e2e8f0; padding-bottom:4px;">
+                                <span style="color:var(--text-muted);">RUL Start / End:</span>
+                                <strong id="rep-rul-span">N/A</strong>
+                            </div>
+                        </div>
+
+                        <!-- EXPORT & PRINT BUTTONS -->
+                        <button id="btn-export-json" class="btn btn-primary full-width margin-bottom"><i class="fa-solid fa-download"></i> Download JSON Mission Report</button>
+                        <button id="btn-print-report" class="btn btn-secondary full-width"><i class="fa-solid fa-print"></i> Print Prototype Mission Health Summary PDF</button>
+                    </div>
+
+                </div>
+            </div>
+
+
+            <!-- 5. ACTUAL MEASURED RUNTIME METRICS & DESIGN TARGET ASSUMPTIONS VIEW -->
+            <div id="view-metrics" class="tab-content">
+                <div class="grid-2col" style="gap:1.5rem;">
+                    
+                    <!-- 1. ACTUAL MEASURED RUNTIME METRICS CARD -->
+                    <div class="card glass-panel">
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.6rem;">
+                            <h3 style="margin:0;"><i class="fa-solid fa-gauge-simple-high text-blue"></i> Actual Measured Runtime Metrics</h3>
+                            <span class="badge-role op" style="font-size:0.7rem; background:#e0f2fe; color:#0369a1; font-weight:700;">
+                                <i class="fa-solid fa-stopwatch"></i> High-Res (time.perf_counter) Instrumentation
+                            </span>
+                        </div>
+                        <p style="font-size:0.78rem; color:var(--text-muted); margin-bottom:0.75rem; line-height:1.4;">
+                            Measured live performance metrics captured continuously across the telemetry generation, ML inference, state machine, and WebSockets transmission pipeline.
+                        </p>
+
+                        <div style="font-weight:700; font-size:0.8rem; color:var(--primary-blue); margin-bottom:6px; display:flex; align-items:center; gap:6px;">
+                            <i class="fa-solid fa-clock-history"></i> High-Resolution Latencies & Execution Rates:
+                        </div>
+                        <table class="residual-table" style="font-size:0.75rem; margin-bottom:1rem;">
+                            <thead>
+                                <tr>
+                                    <th>Performance Metric</th>
+                                    <th>Mean</th>
+                                    <th>Median</th>
+                                    <th>P95</th>
+                                    <th>Max</th>
+                                    <th>Unit</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td>Telemetry Effective Update Rate</td>
+                                    <td><strong id="m-rate-mean" class="text-green">10.0</strong></td>
+                                    <td id="m-rate-med">10.0</td>
+                                    <td id="m-rate-p95">10.0</td>
+                                    <td id="m-rate-max">10.0</td>
+                                    <td>Hz</td>
+                                    <td><span id="st-rate" class="gauge-state-badge NORMAL">MEASURED</span></td>
+                                </tr>
+                                <tr>
+                                    <td>Digital Twin Processing Latency</td>
+                                    <td><strong id="m-dt-mean" class="text-blue">1.15</strong></td>
+                                    <td id="m-dt-med">1.10</td>
+                                    <td id="m-dt-p95">1.45</td>
+                                    <td id="m-dt-max">2.10</td>
+                                    <td>ms</td>
+                                    <td><span id="st-dt" class="gauge-state-badge NORMAL">MEASURED</span></td>
+                                </tr>
+                                <tr>
+                                    <td>ML Inference Latency (AE + XGB + LSTM)</td>
+                                    <td><strong id="m-ml-mean" class="text-blue">0.85</strong></td>
+                                    <td id="m-ml-med">0.80</td>
+                                    <td id="m-ml-p95">1.10</td>
+                                    <td id="m-ml-max">1.60</td>
+                                    <td>ms</td>
+                                    <td><span id="st-ml" class="gauge-state-badge NORMAL">MEASURED</span></td>
+                                </tr>
+                                <tr>
+                                    <td>End-to-End Alert Response Latency</td>
+                                    <td><strong id="m-alert-mean">NOT MEASURED</strong></td>
+                                    <td id="m-alert-med">N/A</td>
+                                    <td id="m-alert-p95">N/A</td>
+                                    <td id="m-alert-max">N/A</td>
+                                    <td>ms</td>
+                                    <td><span id="st-alert" class="badge-tag not-evaluated">NOT MEASURED</span></td>
+                                </tr>
+                                <tr>
+                                    <td>WebSocket Message Transmission Rate</td>
+                                    <td colspan="4" id="m-ws-rate" style="font-weight:700; text-align:center;">10.0 msgs/s</td>
+                                    <td>msgs/s</td>
+                                    <td><span id="st-ws" class="gauge-state-badge NORMAL">MEASURED</span></td>
+                                </tr>
+                            </tbody>
+                        </table>
+
+                        <div style="font-weight:700; font-size:0.8rem; color:var(--primary-blue); margin-bottom:6px; display:flex; align-items:center; gap:6px;">
+                            <i class="fa-solid fa-shield-check"></i> Data Quality & Ingestion Integrity:
+                        </div>
+                        <table class="residual-table" style="font-size:0.75rem; margin-bottom:0.75rem;">
+                            <thead>
+                                <tr>
+                                    <th>Integrity Parameter</th>
+                                    <th>Measured Value</th>
+                                    <th>Verification & Calculation Basis</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td>Data Integrity Validation Rate</td>
+                                    <td><strong id="m-integrity-pct" class="text-green">100.0%</strong></td>
+                                    <td>(Valid Frames Passing Schema, Bounds & Continuity / Total) × 100</td>
+                                    <td><span id="st-integrity" class="gauge-state-badge NORMAL">MEASURED</span></td>
+                                </tr>
+                                <tr>
+                                    <td>Dropped / Invalid Telemetry Frames</td>
+                                    <td><strong id="m-dropped-count">0 frames</strong></td>
+                                    <td>Cumulative count of frames failing Schema/Range/Continuity checks</td>
+                                    <td><span id="st-dropped" class="gauge-state-badge NORMAL">MEASURED</span></td>
+                                </tr>
+                                <tr>
+                                    <td>Total Ingested Telemetry Frames</td>
+                                    <td><strong id="m-total-frames">0 frames</strong></td>
+                                    <td>Cumulative count of ingested frames in current active session</td>
+                                    <td><span id="st-total" class="gauge-state-badge NORMAL">MEASURED</span></td>
+                                </tr>
+                            </tbody>
+                        </table>
+
+                        <!-- DATA QUALITY DEFINITION & FORMULA EXPLANATION -->
+                        <div class="xai-box" style="background:#eff6ff; border-left:4px solid #2563eb; font-size:0.78rem;">
+                            <h4 style="color:#1e40af; margin:0 0 4px 0;"><i class="fa-solid fa-calculator"></i> Data Quality Formula & Validation Definition</h4>
+                            <p style="margin:0 0 6px 0; color:#1e3a8a; font-weight:600;">
+                                Data Integrity Validation Rate = (Valid Ingested Frames / Total Ingested Frames) × 100
+                            </p>
+                            <div style="color:#475569; line-height:1.4;">
+                                <strong>Rigorous Frame Validation Criteria:</strong>
+                                <ul style="margin:4px 0 0 16px; padding:0;">
+                                    <li><strong>Schema & Non-Null Check:</strong> All 15 required signals (RPM, MAP, CHT1-4, EGT1-4, Oil Press, Oil Temp, Fuel Flow, Vibration, Battery Volt) present & numeric.</li>
+                                    <li><strong>Physical Range Bounds Check:</strong> Telemetry values within physical bounds (0–7000 RPM, 0–300°C CHT, 0–1100°C EGT, 0–10.0 bar Oil Press, 0–30V Battery).</li>
+                                    <li><strong>Timestamp Continuity Check:</strong> Monotonically non-decreasing timestamps without step gaps &gt; 1.0s.</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 2. DESIGN TARGETS & PROTOTYPE ASSUMPTIONS CARD -->
+                    <div class="card glass-panel">
+                        <h3><i class="fa-solid fa-list-check text-blue"></i> Design Targets & Model Assumptions</h3>
+                        
+                        <!-- ASSUMPTIONS PANEL -->
+                        <div class="xai-box" style="margin-top:0.5rem; background:#f8fafc; border-left:4px solid #059669;">
+                            <h4 style="color:#065f46;"><i class="fa-solid fa-circle-info text-green"></i> Model Physics Baseline & Prototype Assumptions</h4>
+                            <div style="font-size:0.8rem; color:#334155; line-height:1.5;">
+                                <p style="margin:0 0 6px 0;"><strong>System Baseline:</strong> Reference 4-cylinder turbocharged aero-piston model.</p>
+                                <p style="margin:0 0 6px 0;"><strong>Surrogate Basis:</strong> 0D/1D prototype thermodynamic surrogate calculating heat balance, manifold boost, and oil viscosity.</p>
+                                <p style="margin:0 0 6px 0;"><strong>Calibration Status:</strong> Not calibrated using target MALE UAV flight-test data.</p>
+                                <p style="margin:0;"><strong>Operational Requirement:</strong> Requires engine test-rig / HIL / flight-test calibration before operational use.</p>
+                            </div>
+                        </div>
+
+                        <!-- DESIGN TARGETS SPECIFICATIONS TABLE -->
+                        <div style="margin-top:1.2rem;">
+                            <div style="font-weight:700; font-size:0.8rem; color:var(--primary-blue); margin-bottom:6px; display:flex; align-items:center; gap:6px;">
+                                <i class="fa-solid fa-bullseye"></i> Design Target Specifications:
+                            </div>
+                            <table class="residual-table" style="font-size:0.75rem;">
+                                <thead>
+                                    <tr>
+                                        <th>Specification Metric</th>
+                                        <th>Target Specification</th>
+                                        <th>Basis / Rationale</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td>Telemetry Sampling Rate Target</td>
+                                        <td><strong>10.0 Hz</strong></td>
+                                        <td>Real-time operator HUD update rate</td>
+                                    </tr>
+                                    <tr>
+                                        <td>Diagnostic Compute Latency Target</td>
+                                        <td><strong>&lt; 10.0 ms</strong></td>
+                                        <td>Sub-frame anomaly calculation window</td>
+                                    </tr>
+                                    <tr>
+                                        <td>Alert Trigger Response Target</td>
+                                        <td><strong>&lt; 50.0 ms</strong></td>
+                                        <td>Operator warning lead time threshold</td>
+                                    </tr>
+                                    <tr>
+                                        <td>Data Integrity Validation Target</td>
+                                        <td><strong>&gt; 95.0%</strong></td>
+                                        <td>Robustness against missing telemetry</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <!-- DEPLOYMENT DISCLAIMER -->
+                        <div class="xai-box margin-top" style="background:#fff7ed; border-left:4px solid #ea580c;">
+                            <h4 style="color:#9a3412; font-size:0.85rem;"><i class="fa-solid fa-shield-halved text-orange"></i> Verification & Certification Disclaimer</h4>
+                            <p style="font-size:0.78rem; color:#7c2d12; line-height:1.4; margin-top:4px;">
+                                Security-aware prototype architecture with authenticated access, telemetry integrity validation, and auditability. Hardware-in-the-loop (HIL) testing and calibrated engine flight-test data required for production certification.
+                            </p>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+
+            <!-- 6. AI MODELS & DATASET MAPPING VIEW -->
+            <div id="view-models-datasets" class="tab-content">
+                <div class="grid-2col" style="gap:1.5rem;">
+                    
+                    <!-- AI MODEL PERFORMANCE METRICS CARD -->
+                    <div class="card glass-panel">
+                        <h3><i class="fa-solid fa-brain text-blue"></i> Deployed AI/ML Models & Real Evaluation Metrics</h3>
+                        
+                        <!-- 1. DEEP AUTOENCODER -->
+                        <div class="xai-box" style="margin-top:0.75rem; background:#f8fafc; border-left:4px solid #2563eb;">
+                            <div style="display:flex; justify-content:space-between; align-items:center;">
+                                <h4 style="color:#1e40af; font-size:0.88rem; margin:0;"><i class="fa-solid fa-network-wired"></i> 1. PyTorch Deep Autoencoder (Anomaly Detection)</h4>
+                                <span class="badge-tag trained">TRAINED</span>
+                            </div>
+                            <p style="font-size:0.78rem; color:#475569; margin:4px 0;"><strong>Artifact Path:</strong> <code style="color:#1e40af;">models/autoencoder_anomaly.pt</code> (Version: v2.1)</p>
+                            <p style="font-size:0.78rem; color:#475569; margin:4px 0;"><strong>Training Dataset:</strong> NASA C-MAPSS FD001 & UAV Telemetry Baseline</p>
+                            <p style="font-size:0.78rem; color:#475569; margin:4px 0;"><strong>Validation Dataset:</strong> NASA C-MAPSS Test Set (FD001)</p>
+                            <p style="font-size:0.78rem; color:#475569; margin:4px 0;"><strong>Feature Count:</strong> 15 parameters | <strong>Threshold Source:</strong> 99th Percentile Healthy Reconstruction MSE (1.67886)</p>
+                            <p style="font-size:0.78rem; color:#475569; margin:4px 0;"><strong>Evaluation Timestamp:</strong> 2026-09-18T12:00:00Z (Source: <code style="font-size:0.72rem;">models/anomaly_metrics.json</code>)</p>
+                            <div style="display:flex; gap:0.75rem; flex-wrap:wrap; margin-top:6px; font-weight:700; font-size:0.8rem; color:#1e3a8a;">
+                                <span>Precision: <span id="ae-metric-precision" class="text-blue">96.4%</span></span> | 
+                                <span>Recall: <span id="ae-metric-recall" class="text-blue">95.2%</span></span> | 
+                                <span>F1-Score: <span id="ae-metric-f1" class="text-blue">95.8%</span></span> | 
+                                <span>ROC-AUC: <span id="ae-metric-roc" class="text-blue">0.985</span></span>
+                            </div>
+                        </div>
+
+                        <!-- 2. GRU SHORT-HORIZON FORECASTER -->
+                        <div class="xai-box margin-top" style="background:#f8fafc; border-left:4px solid #6366f1;">
+                            <div style="display:flex; justify-content:space-between; align-items:center;">
+                                <h4 style="color:#3730a3; font-size:0.88rem; margin:0;"><i class="fa-solid fa-chart-line text-purple"></i> 2. PyTorch GRU Short-Horizon Forecaster</h4>
+                                <div><span class="badge-tag trained">TRAINED</span> <span class="badge-tag simulated">SIMULATED TRAJECTORIES</span></div>
+                            </div>
+                            <p style="font-size:0.78rem; color:#475569; margin:4px 0;"><strong>Artifact Path:</strong> <code style="color:#3730a3;">models/forecast/gru_forecaster.pt</code> (Version: v1.0)</p>
+                            <p style="font-size:0.78rem; color:#475569; margin:4px 0;"><strong>Training Dataset:</strong> SIMULATED REFERENCE AERO-PISTON TRAJECTORIES (125 Trajectories)</p>
+                            <p style="font-size:0.78rem; color:#475569; margin:4px 0;"><strong>Input Window:</strong> 30 seconds (300 frames) | <strong>Forecast Horizons:</strong> +10s, +30s, +60s</p>
+                            <p style="font-size:0.78rem; color:#475569; margin:4px 0;"><strong>Target Parameters:</strong> CHT1, Oil Pressure, Oil Temperature, Vibration RMS, EGT1, MAP</p>
+                            <div style="display:flex; gap:0.75rem; flex-wrap:wrap; margin-top:6px; font-weight:700; font-size:0.8rem; color:#3730a3;">
+                                <span>CHT1 30s MAE: 1.41 °C</span> | 
+                                <span>Oil Press 30s MAE: 0.06 bar</span> | 
+                                <span>Vib RMS 30s MAE: 0.08 g</span>
+                            </div>
+                        </div>
+
+                        <!-- 3. SEQUENCE LSTM RUL MODEL -->
+                        <div class="xai-box margin-top" style="background:#f8fafc; border-left:4px solid #059669;">
+                            <div style="display:flex; justify-content:space-between; align-items:center;">
+                                <h4 style="color:#065f46; font-size:0.88rem; margin:0;"><i class="fa-solid fa-clock-history text-green"></i> 3. PyTorch Sequence LSTM RUL Model (Prognostics)</h4>
+                                <div><span class="badge-tag trained">TRAINED</span> <span class="badge-tag analogue">ANALOGUE</span></div>
+                            </div>
+                            <p style="font-size:0.78rem; color:#475569; margin:4px 0;"><strong>Artifact Path:</strong> <code style="color:#065f46;">models/lstm_rul.pt</code> (Version: v1.4)</p>
+                            <p style="font-size:0.78rem; color:#475569; margin:4px 0;"><strong>Training Dataset:</strong> NASA C-MAPSS FD001 (19,178 operational run-to-failure cycles)</p>
+                            <p style="font-size:0.78rem; color:#475569; margin:4px 0;"><strong>Sequence Length:</strong> 30 operational cycles | <strong>Unit:</strong> cycles</p>
+                            <div style="display:flex; gap:0.75rem; flex-wrap:wrap; margin-top:6px; font-weight:700; font-size:0.8rem; color:#064e3b;">
+                                <span>MAE: <span id="lstm-metric-mae">14.82 cycles</span></span> | 
+                                <span>RMSE: <span id="lstm-metric-rmse">18.54 cycles</span></span> | 
+                                <span>R² Score: <span id="lstm-metric-r2">0.912</span></span>
+                            </div>
+                            <div style="font-size:0.72rem; color:#047857; background:#ecfdf5; border-radius:4px; padding:4px 8px; margin-top:6px; line-height:1.3;">
+                                <i class="fa-solid fa-circle-info"></i> <strong>ANALOGUE PROGNOSTICS NOTE:</strong> NASA C-MAPSS is a turbofan run-to-failure benchmark used as an analogous degradation source. Its sensor variables are not treated as direct measurements of aero-piston engine parameters.
+                            </div>
+                        </div>
+
+                        <!-- 4. XGBOOST MULTI-CLASS FAULT CLASSIFIER -->
+                        <div class="xai-box margin-top" style="background:#f8fafc; border-left:4px solid #ea580c;">
+                            <div style="display:flex; justify-content:space-between; align-items:center;">
+                                <h4 style="color:#9a3412; font-size:0.88rem; margin:0;"><i class="fa-solid fa-tree text-orange"></i> 4. XGBoost Multi-Class Fault Classifier</h4>
+                                <div><span class="badge-tag trained">TRAINED</span> <span class="badge-tag simulated">MULTI-CLASS SYNTHETIC</span></div>
+                            </div>
+                            <p style="font-size:0.78rem; color:#475569; margin:4px 0;"><strong>Artifact Path:</strong> <code style="color:#9a3412;">models/xgboost_fault.json</code> (Version: v1.0)</p>
+                            
+                            <div style="margin-top:6px; padding-top:6px; border-top:1px solid #fed7aa;">
+                                <div style="font-size:0.78rem; font-weight:700; color:#9a3412; margin-bottom:4px; display:flex; align-items:center; gap:6px;">
+                                    <i class="fa-solid fa-database"></i> TRAINED MULTI-CLASS FAULT LABELS (7 Classes):
+                                </div>
+                                <div style="font-size:0.72rem; color:#475569; line-height:1.4;">
+                                    <code>0: NOMINAL</code>, <code>1: Cylinder Misfire</code>, <code>2: Fuel Injector Abnormality</code>, <code>3: Lubrication Failure / Low Oil Pressure</code>, <code>4: Cylinder Head Overheating</code>, <code>5: Abnormal Mechanical Vibration</code>, <code>6: Electrical Bus Voltage Sensor Drift</code>
+                                </div>
+                            </div>
+
+                            <div style="margin-top:6px; padding-top:6px; border-top:1px dashed #fed7aa;">
+                                <div style="font-size:0.78rem; font-weight:700; color:#9a3412; margin-bottom:4px; display:flex; align-items:center; gap:6px;">
+                                    <i class="fa-solid fa-flask"></i> SIMULATED PROTOTYPE FAULT INJECTION SCENARIOS (6 Scenarios):
+                                </div>
+                                <div style="font-size:0.72rem; color:#475569; line-height:1.4;">
+                                    CYLINDER_THERMAL, OIL_PRESSURE, INCREASING_VIBRATION, SENSOR_DRIFT, INTERMITTENT_COMBUSTION, INJECTOR_DISTURBANCE
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 5. PHYSICS SURROGATE MODEL -->
+                        <div class="xai-box margin-top" style="background:#f8fafc; border-left:4px solid #0d9488;">
+                            <div style="display:flex; justify-content:space-between; align-items:center;">
+                                <h4 style="color:#0f766e; font-size:0.88rem; margin:0;"><i class="fa-solid fa-atom text-teal"></i> 5. 0D/1D Thermodynamic Aero-Piston Engine Model</h4>
+                                <div><span class="badge-tag physics">0D/1D THERMODYNAMIC PHYSICS SURROGATE</span></div>
+                            </div>
+                            <p style="font-size:0.78rem; color:#475569; margin:4px 0;"><strong>Implementation File:</strong> <code style="color:#0f766e;">ml_service/pinn_physics_model.py</code></p>
+                            <p style="font-size:0.78rem; color:#475569; margin:4px 0;"><strong>Engine Specification:</strong> 1211cc 4-Cylinder Turbocharged Aero-Piston Reference Model</p>
+                            <div style="font-size:0.72rem; color:#0f766e; background:#f0fdfa; border-radius:4px; padding:4px 8px; margin-top:4px; line-height:1.3;">
+                                <i class="fa-solid fa-circle-info"></i> <strong>PHYSICS SURROGATE NOTE:</strong> First-principles 0D/1D thermodynamic conservation equations calculating energy, manifold boost, thermal equilibrium, and power baselines. Not a trained neural network PINN checkpoint.
+                            </div>
+                        </div>
+
+                    </div>
+
+                    <!-- DATASET MAPPING & TRANSPARENCY TABLE -->
+                    <div class="card glass-panel">
+                        <h3><i class="fa-solid fa-table-list text-blue"></i> Multi-Dataset Provenance & Mapping Matrix</h3>
+                        <p style="font-size:0.78rem; color:var(--text-muted); margin-bottom:0.75rem;">
+                            Mapping of Reference Aero-Piston Simulator, NASA C-MAPSS, ALFA, RflyMAD, and UAV-FD signals into the Digital Twin core.
+                        </p>
+                        
+                        <table class="residual-table" style="font-size:0.75rem;">
+                            <thead>
+                                <tr>
+                                    <th>Dataset / Source</th>
+                                    <th>Source Feature</th>
+                                    <th>Original Physical Meaning</th>
+                                    <th>Prototype Usage</th>
+                                    <th>Mapping Type</th>
+                                    <th>Active Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td>Reference Simulator</td>
+                                    <td>Canonical Telemetry Stream</td>
+                                    <td>1211cc Aero-piston engine 10Hz stream</td>
+                                    <td>Primary live Digital Twin telemetry & state machine input</td>
+                                    <td><span class="badge-tag simulated">SIMULATED</span></td>
+                                    <td><span class="badge-tag trained">YES</span></td>
+                                </tr>
+                                <tr>
+                                    <td>NASA C-MAPSS FD001</td>
+                                    <td>s2, s3, s4, s11, s12, s15</td>
+                                    <td>Turbofan engine sensors (T24, T30, T50, Ps30, FarB, BPR)</td>
+                                    <td>Analogous run-to-failure degradation feature vector for long-term RUL sequence model</td>
+                                    <td><span class="badge-tag analogue">ANALOGUE</span></td>
+                                    <td><span class="badge-tag trained">YES</span></td>
+                                </tr>
+                                <tr>
+                                    <td>ALFA UAV Dataset</td>
+                                    <td>battery_voltage, servo_raw</td>
+                                    <td>UAV flight logs & servo positions</td>
+                                    <td>Electrical bus bounds & throttle profile reference</td>
+                                    <td><span class="badge-tag analogue">ANALOGUE</span></td>
+                                    <td><span class="badge-tag not-evaluated" style="font-size:0.65rem;">AVAILABLE / NOT CURRENTLY USED BY RUNTIME MODEL</span></td>
+                                </tr>
+                                <tr>
+                                    <td>RflyMAD Dataset</td>
+                                    <td>gyro_z / IMU RMS</td>
+                                    <td>Triaxial IMU motion & vibration logs</td>
+                                    <td>Vibration RMS reference envelope</td>
+                                    <td><span class="badge-tag analogue">ANALOGUE</span></td>
+                                    <td><span class="badge-tag not-evaluated" style="font-size:0.65rem;">AVAILABLE / NOT CURRENTLY USED BY RUNTIME MODEL</span></td>
+                                </tr>
+                                <tr>
+                                    <td>UAV-FD Dataset</td>
+                                    <td>motor_PWM_fault</td>
+                                    <td>ESC motor PWM command signals</td>
+                                    <td>Actuator load disturbance baseline</td>
+                                    <td><span class="badge-tag analogue">ANALOGUE</span></td>
+                                    <td><span class="badge-tag not-evaluated" style="font-size:0.65rem;">AVAILABLE / NOT CURRENTLY USED BY RUNTIME MODEL</span></td>
+                                </tr>
+                            </tbody>
+                        </table>
+
+                        <div class="xai-box margin-top" style="background:#fff7ed; border-left:4px solid #ea580c;">
+                            <h4 style="color:#9a3412; font-size:0.82rem;"><i class="fa-solid fa-triangle-exclamation"></i> Dataset Provenance & Usage Note</h4>
+                            <p style="font-size:0.75rem; color:#7c2d12; line-height:1.4; margin-top:4px;">
+                                NASA C-MAPSS is a turbofan run-to-failure dataset used solely as an analogous prognostics/degradation source. Its sensor variables are not presented as direct measurements of aero-piston engine parameters. Live telemetry is generated by the reference aero-piston simulator.
+                            </p>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+
+
+
+            <!-- 7. GCS & DFCS INTEGRATION DEMONSTRATOR VIEW -->
+            <div id="view-gcs-dfcs" class="tab-content">
+                
+                <!-- TOP HEADER & SIMULATED DATA LINK BANNER -->
+                <div class="card glass-panel" style="margin-bottom:1.25rem;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5rem; margin-bottom:0.75rem;">
+                        <div>
+                            <h3 style="margin:0;"><i class="fa-solid fa-tower-cell text-blue"></i> REFERENCE MALE UAV DIGITAL TWIN DEMONSTRATOR</h3>
+                            <p style="margin:2px 0 0 0; font-size:0.78rem; color:var(--text-muted); font-weight:600;">
+                                Ground Control Station (GCS) & DFCS Decision-Support Advisory Interface
+                            </p>
+                        </div>
+                        <span class="badge-role op" style="font-size:0.7rem; background:#eff6ff; color:#1d4ed8; font-weight:700; padding:4px 10px; border-radius:6px; border:1px solid #bfdbfe;">
+                            <i class="fa-solid fa-plane"></i> CALLSIGN: <strong id="gcs-aircraft-callsign">MALE-UAV-REF-01</strong>
+                        </span>
+                    </div>
+
+                    <!-- SIMULATED GCS DATA LINK STATUS BAR -->
+                    <div style="background:#f8fafc; border:1px solid var(--border-light); border-radius:10px; padding:0.75rem 1rem; display:grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap:0.75rem; font-size:0.78rem;">
+                        <div>
+                            <span style="color:var(--text-muted); display:block; font-size:0.68rem; font-weight:700;">SIMULATED DATA LINK</span>
+                            <span id="gcs-link-status" style="font-weight:700;" class="text-green"><i class="fa-solid fa-signal"></i> CONNECTED</span>
+                        </div>
+                        <div>
+                            <span style="color:var(--text-muted); display:block; font-size:0.68rem; font-weight:700;">TELEMETRY RATE</span>
+                            <strong id="gcs-rate-display" style="font-family:var(--font-mono);">10.0 Hz</strong>
+                        </div>
+                        <div>
+                            <span style="color:var(--text-muted); display:block; font-size:0.68rem; font-weight:700;">LAST SNAPSHOT</span>
+                            <strong id="gcs-timestamp-display" style="font-family:var(--font-mono);">t=0.0s</strong>
+                        </div>
+                        <div>
+                            <span style="color:var(--text-muted); display:block; font-size:0.68rem; font-weight:700;">SEQUENCE NUMBER</span>
+                            <strong id="gcs-seq-display" style="font-family:var(--font-mono);">Seq #0</strong>
+                        </div>
+                        <div>
+                            <span style="color:var(--text-muted); display:block; font-size:0.68rem; font-weight:700;">TWIN SESSION ID</span>
+                            <span id="gcs-session-id" style="font-family:var(--font-mono); font-size:0.7rem; color:var(--primary-blue); font-weight:700;">aero_twin_session</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- SIMULATED FAULT INJECTION ACTIVE BANNER (INJECTED TRUTH) -->
+                <div id="gcs-fault-banner" class="card glass-panel hidden" style="border-left:5px solid #ea580c; background:#fff7ed; margin-bottom:1.25rem; padding:0.75rem 1rem;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5rem;">
+                        <div>
+                            <h4 style="margin:0; color:#c2410c; font-size:0.88rem; font-family:var(--font-display);">
+                                <i class="fa-solid fa-play text-orange"></i> SIMULATED FAULT INJECTION ACTIVE (Physical Bias Input)
+                            </h4>
+                            <div style="font-size:0.78rem; color:#9a3412; margin-top:2px; font-weight:600;">
+                                Scenario: <span id="gcs-fault-scenario">CYLINDER_THERMAL</span> | 
+                                Component: <strong id="gcs-fault-comp">CYLINDER_1</strong> | 
+                                Profile: <span id="gcs-fault-prof">GRADUAL</span> | 
+                                Effect: <strong id="gcs-fault-effect">100%</strong> | 
+                                Elapsed: <span id="gcs-fault-elapsed">0.0s</span>
+                            </div>
+                        </div>
+                        <span class="badge-role eng" style="font-size:0.68rem; background:#ffedd5; color:#c2410c; border:1px solid #fed7aa; padding:4px 8px; border-radius:6px; font-weight:700;">
+                            <i class="fa-solid fa-flask"></i> INJECTED TRUTH (Separate from AI Diagnosis)
+                        </span>
+                    </div>
+                </div>
+
+                <div class="grid-2col" style="gap:1.5rem;">
+                    
+                    <!-- LEFT COLUMN: ENGINE HEALTH & TRAJECTORY FORECAST PANEL -->
+                    <div style="display:flex; flex-direction:column; gap:1.25rem;">
+                        
+                        <!-- ENGINE HEALTH METRICS -->
+                        <div class="card glass-panel">
+                            <h3 style="margin-top:0; margin-bottom:0.6rem; font-size:0.95rem;"><i class="fa-solid fa-heart-pulse text-red"></i> Digital Twin Engine Health Overview</h3>
+                            
+                            <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.6rem; margin-bottom:0.75rem;">
+                                <div style="background:#ffffff; padding:0.75rem; border-radius:8px; border:1px solid var(--border-light);">
+                                    <span style="font-size:0.68rem; color:var(--text-muted); font-weight:700; display:block;">GLOBAL SYSTEM STATE</span>
+                                    <div style="font-size:1.1rem; font-weight:800; margin-top:4px;" id="gcs-state-display" class="badge-state NORMAL">NORMAL</div>
+                                </div>
+                                <div style="background:#ffffff; padding:0.75rem; border-radius:8px; border:1px solid var(--border-light);">
+                                    <span style="font-size:0.68rem; color:var(--text-muted); font-weight:700; display:block;">OVERALL HEALTH INDEX</span>
+                                    <div style="font-size:1.3rem; font-weight:800; color:#059669;" id="gcs-hi-display">98.5%</div>
+                                </div>
+                                <div style="background:#ffffff; padding:0.75rem; border-radius:8px; border:1px solid var(--border-light);">
+                                    <span style="font-size:0.68rem; color:var(--text-muted); font-weight:700; display:block;">ANOMALY SCORE</span>
+                                    <div style="font-size:0.85rem; font-weight:800; color:#0284c7; margin-top:4px;" id="gcs-anomaly-display">Score: 0.015 (Nominal)</div>
+                                </div>
+                                <div style="background:#ffffff; padding:0.75rem; border-radius:8px; border:1px solid var(--border-light);">
+                                    <span style="font-size:0.68rem; color:var(--text-muted); font-weight:700; display:block;">PREDICTED RUL</span>
+                                    <div style="font-size:1.1rem; font-weight:800; color:#0284c7;" id="gcs-rul-display">210.0 cycles</div>
+                                </div>
+                            </div>
+
+                            <!-- 5-SUBSYSTEM HEALTH STATUS GRID -->
+                            <div style="border-top:1px solid var(--border-light); padding-top:0.6rem; margin-bottom:0.75rem;">
+                                <div style="font-size:0.75rem; font-weight:700; color:var(--text-secondary); margin-bottom:0.4rem;">
+                                    <i class="fa-solid fa-cubes"></i> 5-Subsystem Health Breakdown:
+                                </div>
+                                <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap:0.4rem; font-size:0.72rem; text-align:center;">
+                                    <div style="background:#f8fafc; padding:6px; border-radius:6px; border:1px solid var(--border-light);">
+                                        <small style="color:var(--text-muted); display:block;">Thermal</small>
+                                        <strong id="gcs-hi-thermal" class="text-green">98.0%</strong>
+                                        <div id="gcs-state-thermal" class="gauge-state-badge NORMAL" style="font-size:0.6rem; padding:1px 4px; margin-top:2px;">NORMAL</div>
+                                    </div>
+                                    <div style="background:#f8fafc; padding:6px; border-radius:6px; border:1px solid var(--border-light);">
+                                        <small style="color:var(--text-muted); display:block;">Lubrication</small>
+                                        <strong id="gcs-hi-lubrication" class="text-green">99.0%</strong>
+                                        <div id="gcs-state-lubrication" class="gauge-state-badge NORMAL" style="font-size:0.6rem; padding:1px 4px; margin-top:2px;">NORMAL</div>
+                                    </div>
+                                    <div style="background:#f8fafc; padding:6px; border-radius:6px; border:1px solid var(--border-light);">
+                                        <small style="color:var(--text-muted); display:block;">Combustion</small>
+                                        <strong id="gcs-hi-combustion" class="text-green">97.0%</strong>
+                                        <div id="gcs-state-combustion" class="gauge-state-badge NORMAL" style="font-size:0.6rem; padding:1px 4px; margin-top:2px;">NORMAL</div>
+                                    </div>
+                                    <div style="background:#f8fafc; padding:6px; border-radius:6px; border:1px solid var(--border-light);">
+                                        <small style="color:var(--text-muted); display:block;">Electrical</small>
+                                        <strong id="gcs-hi-electrical" class="text-green">100.0%</strong>
+                                        <div id="gcs-state-electrical" class="gauge-state-badge NORMAL" style="font-size:0.6rem; padding:1px 4px; margin-top:2px;">NORMAL</div>
+                                    </div>
+                                    <div style="background:#f8fafc; padding:6px; border-radius:6px; border:1px solid var(--border-light);">
+                                        <small style="color:var(--text-muted); display:block;">Mechanical</small>
+                                        <strong id="gcs-hi-mechanical" class="text-green">96.0%</strong>
+                                        <div id="gcs-state-mechanical" class="gauge-state-badge NORMAL" style="font-size:0.6rem; padding:1px 4px; margin-top:2px;">NORMAL</div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- ADDITIONAL PARAMETERS -->
+                            <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.4rem; font-size:0.75rem; background:#f8fafc; padding:6px 10px; border-radius:6px; border:1px solid var(--border-light);">
+                                <div><strong>Predictive Risk Score:</strong> <span id="gcs-risk-score-display" class="font-mono font-bold">0.00 / 1.0</span></div>
+                                <div><strong>Est. Time-to-Risk:</strong> <span id="gcs-ttr-display" class="font-semibold">N/A (Nominal)</span></div>
+                                <div><strong>Flight Scenario:</strong> <span id="gcs-scenario-display" class="font-semibold">CRUISE</span></div>
+                                <div><strong>Model Source:</strong> <span id="gcs-model-source" class="font-semibold text-purple">GRU Short-Horizon Model</span></div>
+                            </div>
+                        </div>
+
+                        <!-- DOMINANT PREDICTIVE TRAJECTORY FORECAST CARD -->
+                        <div class="card glass-panel">
+                            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.5rem;">
+                                <h3 style="margin:0; font-size:0.9rem;"><i class="fa-solid fa-chart-line text-purple"></i> Dominant Subsystem Trajectory Forecast</h3>
+                                <span id="gcs-fc-source" style="font-size:0.68rem; color:#64748b; font-weight:700;">GRU Short-Horizon Model</span>
+                            </div>
+
+                            <div style="background:#f8fafc; border:1px solid var(--border-light); border-radius:8px; padding:0.75rem; font-size:0.78rem;">
+                                <div style="font-weight:700; color:var(--primary-blue); margin-bottom:6px;" id="gcs-forecast-param-title">
+                                    <i class="fa-solid fa-temperature-full"></i> Thermal Trajectory (Cylinder 1 CHT)
+                                </div>
+                                <div style="display:grid; grid-template-columns:1fr 1fr 1fr 1fr; gap:0.4rem; text-align:center; margin-bottom:0.6rem;">
+                                    <div style="background:#ffffff; padding:6px; border-radius:6px; border:1px solid var(--border-light);">
+                                        <small style="color:var(--text-muted); display:block;">Current</small>
+                                        <strong id="gcs-fc-current" style="font-family:var(--font-mono);">122.5 °C</strong>
+                                    </div>
+                                    <div style="background:#ffffff; padding:6px; border-radius:6px; border:1px solid var(--border-light);">
+                                        <small style="color:var(--text-muted); display:block;">+10s</small>
+                                        <strong id="gcs-fc-10s" style="font-family:var(--font-mono);">123.0 °C</strong>
+                                    </div>
+                                    <div style="background:#ffffff; padding:6px; border-radius:6px; border:1px solid var(--border-light);">
+                                        <small style="color:var(--text-muted); display:block;">+30s</small>
+                                        <strong id="gcs-fc-30s" style="font-family:var(--font-mono);">123.5 °C</strong>
+                                    </div>
+                                    <div style="background:#ffffff; padding:6px; border-radius:6px; border:1px solid var(--border-light);">
+                                        <small style="color:var(--text-muted); display:block;">+60s</small>
+                                        <strong id="gcs-fc-60s" style="font-family:var(--font-mono);">124.0 °C</strong>
+                                    </div>
+                                </div>
+
+                                <div style="display:flex; justify-content:space-between; font-size:0.75rem; border-top:1px solid #e2e8f0; padding-top:6px;">
+                                    <span><strong>Safety Envelope:</strong> <span id="gcs-fc-envelope" class="text-green">&lt; 145.0 °C</span></span>
+                                    <span><strong>Est. Time-to-Risk:</strong> <strong id="gcs-fc-ttr">N/A (Nominal)</strong></span>
+                                </div>
+                            </div>
+                        </div>
+
+                    </div>
+
+                    <!-- RIGHT COLUMN: DFCS ADVISORY DEMONSTRATOR & EVENT LOG -->
+                    <div style="display:flex; flex-direction:column; gap:1.25rem;">
+                        
+                        <!-- DFCS ADVISORY DEMONSTRATOR CARD -->
+                        <div class="card glass-panel" id="dfcs-card-panel" style="border-left:5px solid var(--primary-blue);">
+                            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.5rem;">
+                                <h3 style="margin:0; font-size:0.95rem;"><i class="fa-solid fa-plane-circle-check text-blue"></i> DFCS ADVISORY DEMONSTRATOR</h3>
+                                <span id="dfcs-advisory-badge" class="gauge-state-badge NORMAL">NOMINAL MONITORING</span>
+                            </div>
+                            
+                            <p style="font-size:0.78rem; color:var(--text-muted); margin-bottom:0.75rem; line-height:1.4;">
+                                Autonomous decision-support channel providing flight envelope limit advisories to the UAV Ground Control Station operator and autopilot demonstrator.
+                            </p>
+
+                            <!-- ADVISORY SPECIFICATION BOX -->
+                            <div class="xai-box" style="background:#eff6ff; border-left:4px solid #2563eb;" id="dfcs-advisory-box">
+                                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                                    <h4 style="color:#1e40af; margin:0;" id="dfcs-advisory-title"><i class="fa-solid fa-sliders"></i> Nominal System Monitoring</h4>
+                                    <span id="dfcs-condition-type" style="font-size:0.68rem; background:#dbeafe; color:#1e40af; padding:2px 6px; border-radius:4px; font-weight:700;">
+                                        NOMINAL BASELINE
+                                    </span>
+                                </div>
+
+                                <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.4rem; font-size:0.78rem; margin-bottom:0.5rem; background:#ffffff; padding:0.5rem; border-radius:6px; border:1px solid #bfdbfe;">
+                                    <div><strong>Digital Twin State:</strong> <span id="dfcs-curr-state" class="badge-state NORMAL">NORMAL</span></div>
+                                    <div><strong>Suggested Demand Level:</strong> <span id="dfcs-demand-level" style="font-weight:800; color:#1d4ed8;">NOMINAL</span></div>
+                                </div>
+
+                                <div style="font-size:0.78rem; color:#475569; margin-bottom:0.4rem;" id="dfcs-advisory-rationale">
+                                    <strong>Advisory Rationale:</strong> <span id="dfcs-reason-text">All propulsion parameters operating within nominal physical envelopes. Trajectory forecasts remain stable over 60s window.</span>
+                                </div>
+
+                                <div style="font-size:0.78rem; color:#1e3a8a; font-weight:600; border-top:1px solid #bfdbfe; padding-top:4px;" id="dfcs-operator-action-box">
+                                    <strong>Suggested Operator Action:</strong> <span id="dfcs-action-text">Maintain standard cruise flight profile. System operating in nominal envelope.</span>
+                                </div>
+                            </div>
+
+                            <!-- SAFETY DISCLAIMER NOTICE (PART 10) -->
+                            <div style="background:#fef2f2; border:1px solid #fecaca; border-radius:8px; padding:0.6rem; margin-top:0.75rem; font-size:0.72rem; color:#991b1b; line-height:1.4;">
+                                <i class="fa-solid fa-shield-halved"></i> <strong>PROTOTYPE DECISION-SUPPORT ONLY</strong> — NO REAL FLIGHT CONTROL COMMAND IS GENERATED OR TRANSMITTED — NOT FLIGHT-CERTIFIED
+                            </div>
+                        </div>
+
+                        <!-- LIVE ADVISORY & EVENT HISTORY LOG (PART 13) -->
+                        <div class="card glass-panel">
+                            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.4rem;">
+                                <h3 style="margin:0; font-size:0.88rem;"><i class="fa-solid fa-list-check text-blue"></i> Advisory & State Transition Audit Trail</h3>
+                                <span style="font-size:0.68rem; color:var(--text-muted); font-weight:600;">Deduplicated Live History</span>
+                            </div>
+
+                            <table class="residual-table" style="font-size:0.75rem;">
+                                <thead>
+                                    <tr>
+                                        <th>Timestamp</th>
+                                        <th>State</th>
+                                        <th>Advisory Level</th>
+                                        <th>Event Description / Rationale</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="gcs-event-history-body">
+                                    <tr><td colspan="4" style="text-align:center; color:var(--text-muted);">No state transitions recorded. Operating in nominal baseline.</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+
+                    </div>
+
+                </div>
+            </div>
+
+            <!-- 8. SECURITY AUDIT LOGS VIEW (ENGINEER ONLY) -->
+            <div id="view-audit" class="tab-content">
+                <div class="card glass-panel">
+                    <h3><i class="fa-solid fa-user-shield"></i> Security Audit Trail & Data Integrity Log</h3>
+                    <table class="audit-table">
+                        <thead>
+                            <tr>
+                                <th>Timestamp</th>
+                                <th>User</th>
+                                <th>Role</th>
+                                <th>Action</th>
+                                <th>Details</th>
+                            </tr>
+                        </thead>
+                        <tbody id="audit-table-body">
+                            <tr><td colspan="5" style="text-align:center; color:var(--text-muted); padding:1rem;"><i class="fa-solid fa-circle-notch fa-spin"></i> Loading security logs...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+        </main>
+    </div>
+
+    <!-- COMPOUND FAULT SAFETY CONFIRMATION MODAL -->
+    <div id="compound-fault-modal" class="modal-overlay hidden" style="position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(15,23,42,0.75); display:flex; justify-content:center; align-items:center; z-index:9999;">
+        <div class="modal-box card glass-panel" style="max-width: 480px; text-align: center; border-left: 5px solid #d97706; background:#ffffff; padding:1.75rem; border-radius:8px; box-shadow:0 20px 25px -5px rgba(0,0,0,0.3);">
+            <h3 style="color:#b45309; margin-top:0; font-size:1.1rem; font-family:var(--font-display);"><i class="fa-solid fa-triangle-exclamation text-orange"></i> COMPOUND FAULT INJECTION WARNING</h3>
+            <p style="font-size:0.9rem; color:var(--text-secondary); line-height:1.5; margin: 1rem 0;">
+                Another simulated fault is currently active.<br>
+                Starting this fault will create a <strong>compound-fault scenario</strong>.
+            </p>
+            <p style="font-size:0.85rem; font-weight:700; color:var(--text-primary); margin-bottom:1.5rem;">Continue?</p>
+            <div style="display:flex; justify-content:center; gap:1rem;">
+                <button id="btn-cancel-compound-fault" class="btn btn-secondary" style="padding:0.5rem 1.25rem;">CANCEL</button>
+                <button id="btn-confirm-compound-fault" class="btn btn-danger" style="padding:0.5rem 1.25rem; background:#c2410c; border-color:#c2410c; color:#fff;">START COMPOUND FAULT</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/app.js?v=7"></script>
+</body>
+</html>
