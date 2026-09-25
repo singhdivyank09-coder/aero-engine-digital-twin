@@ -25,32 +25,17 @@ document.addEventListener("DOMContentLoaded", async () => {
     checkServerConnection();
 
     if (!authToken) {
-        await autoLoginDefaultUser();
+        showLoginModal();
     } else {
         showMainGCS();
     }
 });
 
-async function autoLoginDefaultUser() {
-    try {
-        const res = await fetch(`${API_BASE}/api/auth/login`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ username: "engineer", password: "engineer123" })
-        });
-        if (res.ok) {
-            const data = await res.json();
-            authToken = data.access_token;
-            userRole = data.role;
-            userName = data.full_name;
-            localStorage.setItem("dt_token", authToken);
-            localStorage.setItem("dt_role", userRole);
-            localStorage.setItem("dt_name", userName);
-        }
-    } catch(e) {
-        console.error("Auto login failed:", e);
-    }
-    showMainGCS();
+function showLoginModal() {
+    const loginModal = document.getElementById("login-modal");
+    const mainGcs = document.getElementById("main-gcs");
+    if (loginModal) loginModal.classList.add("active");
+    if (mainGcs) mainGcs.classList.add("hidden");
 }
 
 async function checkServerConnection() {
@@ -496,10 +481,14 @@ setInterval(() => {
 
 // WEBSOCKET TELEMETRY STREAM
 function connectWebSocket() {
+    if (!authToken) {
+        console.warn("Cannot connect WebSocket telemetry stream without authentication token.");
+        return;
+    }
     if (telemetrySocket && (telemetrySocket.readyState === WebSocket.OPEN || telemetrySocket.readyState === WebSocket.CONNECTING)) {
         return;
     }
-    const wsUrl = `${WS_BASE}/ws/telemetry`;
+    const wsUrl = `${WS_BASE}/ws/telemetry?token=${encodeURIComponent(authToken)}`;
 
     try {
         telemetrySocket = new WebSocket(wsUrl);
@@ -1752,23 +1741,15 @@ async function authFetch(url, options = {}) {
     try {
         const res = await fetch(url, options);
         if (res.status === 401) {
-            console.warn(`[AUTH 401] Token expired or invalid for ${url}. Re-authenticating default session...`);
-            const reloginRes = await fetch(`${API_BASE}/api/auth/login`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ username: "engineer", password: "engineer123" })
-            });
-            if (reloginRes.ok) {
-                const data = await reloginRes.json();
-                authToken = data.access_token;
-                userRole = data.role;
-                userName = data.full_name;
-                localStorage.setItem("dt_token", authToken);
-                localStorage.setItem("dt_role", userRole);
-                localStorage.setItem("dt_name", userName);
-                options.headers["Authorization"] = `Bearer ${authToken}`;
-                return await fetch(url, options);
-            }
+            console.warn(`[AUTH 401] Token expired or invalid for ${url}. Resetting authentication session...`);
+            localStorage.clear();
+            authToken = null;
+            userRole = null;
+            userName = "User";
+            showLoginModal();
+            const errorDiv = document.getElementById("login-error");
+            if (errorDiv) errorDiv.innerText = "Session expired or invalid. Please log in again.";
+            return res;
         }
         if (!res.ok) {
             const errText = await res.text().catch(() => "");

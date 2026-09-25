@@ -37,6 +37,7 @@ class TestPredictiveStateMachineSuite(unittest.TestCase):
         self.core = DigitalTwinCore()
         self.simulator.reset()
         self.core.reset()
+        predictive_state_machine_instance.reset()
 
     def test_1_thermal_degradation_state_progression(self):
         """

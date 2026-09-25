@@ -1,0 +1,22 @@
+services:
+  - type: web
+    name: aero-engine-digital-twin
+    runtime: docker
+    plan: starter
+    region: oregon
+    autoDeploy: true
+    envVars:
+      - key: JWT_SECRET_KEY
+        generateValue: true
+      - key: DEMO_OPERATOR_PASSWORD
+        value: operator123
+      - key: DEMO_ENGINEER_PASSWORD
+        value: engineer123
+      - key: ALLOWED_ORIGINS
+        value: "*"
+      - key: DB_PATH
+        value: /app/data/telemetry_db.sqlite
+    disk:
+      name: telemetry-data-disk
+      mountPath: /app/data
+      sizeGB: 1

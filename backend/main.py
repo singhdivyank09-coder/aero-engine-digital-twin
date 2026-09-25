@@ -37,20 +37,21 @@ app = FastAPI(
     version="2.0.0"
 )
 
-# Enable CORS for localhost / GCS interface
+# Enable CORS with configurable allowed origins
+allowed_origins_env = os.getenv("ALLOWED_ORIGINS", "*")
+origins = [o.strip() for o in allowed_origins_env.split(",")] if allowed_origins_env != "*" else ["*"]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Serve Frontend Static Assets & Data Files
+# Serve Frontend Static Assets (Data directory is NOT mounted publicly for security)
 FRONTEND_DIR = os.path.join(os.path.dirname(__file__), "..", "frontend")
-DATA_DIR = os.path.join(os.path.dirname(__file__), "..", "data")
 app.mount("/static", StaticFiles(directory=FRONTEND_DIR), name="static")
-app.mount("/data", StaticFiles(directory=DATA_DIR), name="data")
 
 # Pydantic Schemas
 class LoginRequest(BaseModel):
@@ -101,8 +102,15 @@ def login(req: LoginRequest):
     }
 
 @app.get("/api/debug/session")
-def get_debug_session():
+def get_debug_session(authorization: Optional[str] = Header(None)):
     """Development diagnostic endpoint exposing authoritative single active TwinSession state."""
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Missing authorization token")
+    token = authorization.split(" ")[1]
+    payload = verify_token(token)
+    if not payload:
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
+
     global latest_canonical_snapshot
     if latest_canonical_snapshot is None:
         compute_canonical_tick()
@@ -153,11 +161,11 @@ def set_mission_profile(req: MissionProfileRequest, authorization: Optional[str]
         raise HTTPException(status_code=401, detail="Missing authorization token")
     token = authorization.split(" ")[1]
     payload = verify_token(token)
-    if not payload:
-        raise HTTPException(status_code=401, detail="Invalid or expired token")
+    if not payload or payload.get("role") != "engineer":
+        raise HTTPException(status_code=403, detail="Engineer permission required to change scenario profile")
 
     simulator_instance.set_mission_profile(req.profile)
-    log_audit_event(payload["sub"], "scenario changed", f"Changed mission scenario profile to {req.profile}", role=payload.get("role", "operator"))
+    log_audit_event(payload["sub"], "scenario changed", f"Changed mission scenario profile to {req.profile}", role=payload.get("role", "engineer"))
     return {
         "status": "success",
         "profile": req.profile,
@@ -197,8 +205,8 @@ def start_fault_injection(req: StartFaultRequest, authorization: Optional[str] =
         raise HTTPException(status_code=401, detail="Missing authorization token")
     token = authorization.split(" ")[1]
     payload = verify_token(token)
-    if not payload:
-        raise HTTPException(status_code=401, detail="Invalid or expired token")
+    if not payload or payload.get("role") != "engineer":
+        raise HTTPException(status_code=403, detail="Engineer permission required for fault injection")
 
     comp = req.component or "CYLINDER_1"
     if not is_valid_fault_component(req.scenario, comp):
@@ -238,8 +246,8 @@ def pause_fault_injection(authorization: Optional[str] = Header(None)):
         raise HTTPException(status_code=401, detail="Missing authorization token")
     token = authorization.split(" ")[1]
     payload = verify_token(token)
-    if not payload:
-        raise HTTPException(status_code=401, detail="Invalid or expired token")
+    if not payload or payload.get("role") != "engineer":
+        raise HTTPException(status_code=403, detail="Engineer permission required to pause fault injection")
 
     cfg = simulator_instance.pause_fault_injection()
     log_audit_event(payload["sub"], "fault injection paused", f"Fault status changed to {cfg['status']}", role=payload.get("role", "engineer"))
@@ -252,8 +260,8 @@ def clear_fault_injection(authorization: Optional[str] = Header(None)):
         raise HTTPException(status_code=401, detail="Missing authorization token")
     token = authorization.split(" ")[1]
     payload = verify_token(token)
-    if not payload:
-        raise HTTPException(status_code=401, detail="Invalid or expired token")
+    if not payload or payload.get("role") != "engineer":
+        raise HTTPException(status_code=403, detail="Engineer permission required to clear fault injection")
 
     res = simulator_instance.clear_fault_injection()
     log_audit_event(payload["sub"], "fault injection cleared", "Cleared all active fault injections", role=payload.get("role", "engineer"))
@@ -266,8 +274,8 @@ def clear_single_fault_injection(injection_id: str, authorization: Optional[str]
         raise HTTPException(status_code=401, detail="Missing authorization token")
     token = authorization.split(" ")[1]
     payload = verify_token(token)
-    if not payload:
-        raise HTTPException(status_code=401, detail="Invalid or expired token")
+    if not payload or payload.get("role") != "engineer":
+        raise HTTPException(status_code=403, detail="Engineer permission required to clear fault injection")
 
     res = simulator_instance.clear_fault_injection(injection_id=injection_id)
     log_audit_event(payload["sub"], "single fault injection cleared", f"Cleared active fault injection {injection_id}", role=payload.get("role", "engineer"))
@@ -304,11 +312,11 @@ def set_dataset_mode(req: DatasetModeRequest, authorization: Optional[str] = Hea
         raise HTTPException(status_code=401, detail="Missing authorization token")
     token = authorization.split(" ")[1]
     payload = verify_token(token)
-    if not payload:
-        raise HTTPException(status_code=401, detail="Invalid or expired token")
+    if not payload or payload.get("role") != "engineer":
+        raise HTTPException(status_code=403, detail="Engineer permission required to change dataset mode")
 
     simulator_instance.set_mode(req.mode)
-    log_audit_event(payload["sub"], "analytics dataset changed", f"Switched telemetry streaming mode to {req.mode}", role=payload.get("role", "operator"))
+    log_audit_event(payload["sub"], "analytics dataset changed", f"Switched telemetry streaming mode to {req.mode}", role=payload.get("role", "engineer"))
     return {"status": "success", "mode": req.mode}
 
 @app.post("/api/telemetry/data-sources")
@@ -317,15 +325,15 @@ def set_data_sources(req: DataSourcesRequest, authorization: Optional[str] = Hea
         raise HTTPException(status_code=401, detail="Missing authorization token")
     token = authorization.split(" ")[1]
     payload = verify_token(token)
-    if not payload:
-        raise HTTPException(status_code=401, detail="Invalid or expired token")
+    if not payload or payload.get("role") != "engineer":
+        raise HTTPException(status_code=403, detail="Engineer permission required to change telemetry data sources")
 
     if req.telemetry_source:
         simulator_instance.set_telemetry_source(req.telemetry_source)
     if req.analytics_dataset:
         simulator_instance.set_analytics_dataset(req.analytics_dataset)
 
-    log_audit_event(payload["sub"], "analytics dataset changed", f"Set telemetry source to {req.telemetry_source} and analytics dataset to {req.analytics_dataset}", role=payload.get("role", "operator"))
+    log_audit_event(payload["sub"], "analytics dataset changed", f"Set telemetry source to {req.telemetry_source} and analytics dataset to {req.analytics_dataset}", role=payload.get("role", "engineer"))
     return {
         "status": "success",
         "telemetry_source": simulator_instance.telemetry_source,
@@ -423,8 +431,8 @@ def start_new_mission(authorization: Optional[str] = Header(None)):
         raise HTTPException(status_code=401, detail="Missing authorization token")
     token = authorization.split(" ")[1]
     payload = verify_token(token)
-    if not payload:
-        raise HTTPException(status_code=401, detail="Invalid or expired token")
+    if not payload or payload.get("role") != "engineer":
+        raise HTTPException(status_code=403, detail="Engineer permission required to start new mission recording")
         
     new_id = mission_recorder_instance.start_new_mission(
         scenario=getattr(simulator_instance, "mission_profile", "CRUISE"),
@@ -515,6 +523,7 @@ async def canonical_10hz_producer_loop():
             metrics_tracker_instance.record_end_to_end_latency((t_pub_1 - t_gen_0) * 1000.0)
         except Exception as e:
             print(f"[CANONICAL LOOP ERROR] {e}")
+            import traceback
             traceback.print_exc()
         await asyncio.sleep(0.1)  # 10 Hz broadcast rate
 
@@ -533,7 +542,16 @@ def safe_json_default(obj):
     return str(obj)
 
 @app.websocket("/ws/telemetry")
-async def websocket_telemetry_endpoint(websocket: WebSocket):
+async def websocket_telemetry_endpoint(websocket: WebSocket, token: Optional[str] = None):
+    query_token = token or websocket.query_params.get("token")
+    if not query_token:
+        await websocket.close(code=1008, reason="Authentication token required")
+        return
+    payload = verify_token(query_token)
+    if not payload:
+        await websocket.close(code=1008, reason="Invalid or expired token")
+        return
+
     await manager.connect(websocket)
     global latest_canonical_snapshot
     if latest_canonical_snapshot is not None:
@@ -557,3 +575,4 @@ if __name__ == "__main__":
     import uvicorn
     print("[TWIN_SYNC] Starting Uvicorn with single worker configuration (workers=1)...")
     uvicorn.run("backend.main:app", host="0.0.0.0", port=8000, workers=1)
+

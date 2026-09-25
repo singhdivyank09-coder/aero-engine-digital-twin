@@ -8,7 +8,7 @@ try:
 except ImportError:
     from auth import get_password_hash
 
-DB_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "telemetry_db.sqlite")
+DB_PATH = os.getenv("DB_PATH", os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "telemetry_db.sqlite"))
 
 def get_db_connection():
     os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
@@ -153,17 +153,23 @@ def init_db():
     );
     """)
 
-    # Seed Default Users if empty
+    # Seed or Update Default Users
+    op_password = os.getenv("DEMO_OPERATOR_PASSWORD", "operator123")
+    eng_password = os.getenv("DEMO_ENGINEER_PASSWORD", "engineer123")
+
+    op_pass_hash = get_password_hash(op_password)
+    eng_pass_hash = get_password_hash(eng_password)
+
     cursor.execute("SELECT COUNT(*) as count FROM users;")
     if cursor.fetchone()["count"] == 0:
-        op_pass = get_password_hash("operator123")
-        eng_pass = get_password_hash("engineer123")
-        
         cursor.execute("INSERT INTO users (username, password_hash, role, full_name) VALUES (?, ?, ?, ?);",
-                       ("operator", op_pass, "operator", "UAV Flight Operator - GCS Alpha"))
+                       ("operator", op_pass_hash, "operator", "UAV Flight Operator - GCS Alpha"))
         cursor.execute("INSERT INTO users (username, password_hash, role, full_name) VALUES (?, ?, ?, ?);",
-                       ("engineer", eng_pass, "engineer", "Demo Prototype Operator"))
-        conn.commit()
+                       ("engineer", eng_pass_hash, "engineer", "Demo Prototype Operator"))
+    else:
+        # Update user password hashes if environment passwords updated
+        cursor.execute("UPDATE users SET password_hash = ? WHERE username = 'operator';", (op_pass_hash,))
+        cursor.execute("UPDATE users SET password_hash = ? WHERE username = 'engineer';", (eng_pass_hash,))
 
     cursor.execute("UPDATE users SET full_name = 'Demo Prototype Operator' WHERE full_name LIKE '%DRDO%' OR full_name LIKE '%Propulsion Engineer%';")
     conn.commit()
