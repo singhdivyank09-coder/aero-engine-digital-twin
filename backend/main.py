@@ -633,7 +633,13 @@ from backend.model_registry import ModelRegistry
 @app.get("/api/system/metrics")
 def get_system_runtime_metrics():
     """Returns actual measured high-resolution runtime performance & data integrity metrics."""
-    return metrics_tracker_instance.get_summary()
+    res = metrics_tracker_instance.get_summary()
+    res["scheduler"] = scheduler_stats
+    res["system_status_label"] = scheduler_stats.get("system_status_label", "STABLE (10.0 Hz)")
+    res["telemetry_rate_hz"] = scheduler_stats.get("telemetry_rate_hz", 10.0)
+    res["inference_rate_hz"] = scheduler_stats.get("inference_rate_hz", 2.0)
+    res["missed_deadlines"] = scheduler_stats.get("missed_deadlines", 0)
+    return res
 
 @app.get("/api/system/model-registry")
 def get_system_model_registry():
@@ -644,45 +650,87 @@ def get_system_model_registry():
     }
 
 
-# WebSocket Connections Manager
+# WebSocket Connections Manager with per-client non-blocking queues
+class ClientConnection:
+    def __init__(self, websocket: WebSocket, is_demo: bool = False):
+        self.websocket = websocket
+        self.is_demo = is_demo
+        self.queue: asyncio.Queue = asyncio.Queue(maxsize=1)
+        self.sender_task: Optional[asyncio.Task] = None
+
 class ConnectionManager:
     def __init__(self):
-        self.active_connections: List[WebSocket] = []
-        self.demo_connections: List[WebSocket] = []
+        self.active_clients: Dict[WebSocket, ClientConnection] = {}
+        self.demo_count: int = 0
+
+    @property
+    def active_connections(self) -> List[WebSocket]:
+        return list(self.active_clients.keys())
+
+    @property
+    def demo_connections(self) -> List[WebSocket]:
+        return [ws for ws, client in self.active_clients.items() if client.is_demo]
 
     async def connect(self, websocket: WebSocket, is_demo: bool = False) -> bool:
-        if is_demo and len(self.demo_connections) >= MAX_DEMO_WS_CONNECTIONS:
+        if is_demo and self.demo_count >= MAX_DEMO_WS_CONNECTIONS:
             await websocket.close(code=1008, reason="Maximum concurrent Demo connections reached. Please try again later.")
             return False
         await websocket.accept()
-        self.active_connections.append(websocket)
+        client = ClientConnection(websocket, is_demo=is_demo)
+        client.sender_task = asyncio.create_task(self._client_sender_loop(client))
+        self.active_clients[websocket] = client
         if is_demo:
-            self.demo_connections.append(websocket)
+            self.demo_count += 1
         return True
 
+    async def _client_sender_loop(self, client: ClientConnection):
+        try:
+            while True:
+                msg = await client.queue.get()
+                await client.websocket.send_text(msg)
+                metrics_tracker_instance.record_ws_message()
+        except Exception:
+            pass
+        finally:
+            self.disconnect(client.websocket)
+
     def disconnect(self, websocket: WebSocket):
-        if websocket in self.active_connections:
-            self.active_connections.remove(websocket)
-        if websocket in self.demo_connections:
-            self.demo_connections.remove(websocket)
+        client = self.active_clients.pop(websocket, None)
+        if client:
+            if client.is_demo:
+                self.demo_count = max(0, self.demo_count - 1)
+            if client.sender_task and not client.sender_task.done():
+                client.sender_task.cancel()
 
     async def broadcast(self, message: str):
-        for connection in list(self.active_connections):
+        for client in list(self.active_clients.values()):
+            if client.queue.full():
+                try:
+                    client.queue.get_nowait()
+                except asyncio.QueueEmpty:
+                    pass
             try:
-                await connection.send_text(message)
-                metrics_tracker_instance.record_ws_message()
-            except Exception:
-                self.disconnect(connection)
+                client.queue.put_nowait(message)
+            except asyncio.QueueFull:
+                pass
 
 manager = ConnectionManager()
 
-# Single Canonical TwinSession Snapshot Store & 10Hz Producer Loop
+# Scheduler Stats & Single Canonical TwinSession Snapshot Store
+scheduler_stats: Dict[str, Any] = {
+    "missed_deadlines": 0,
+    "telemetry_rate_hz": 10.0,
+    "inference_rate_hz": 2.0,
+    "system_status_label": "STABLE (10.0 Hz)",
+    "data_latency_ms": 0.0
+}
+
 latest_canonical_snapshot: Optional[Dict[str, Any]] = None
 producer_loop_task: Optional[asyncio.Task] = None
 
-def compute_canonical_tick() -> Dict[str, Any]:
+def compute_canonical_tick(dt: float = 0.1) -> Dict[str, Any]:
     global latest_canonical_snapshot
-    raw_frame = simulator_instance.get_next_frame()
+    raw_frame = simulator_instance.get_next_frame(dt=dt)
     twin_frame = digital_twin_core_instance.process_telemetry_frame(raw_frame)
     latest_canonical_snapshot = twin_frame
     
@@ -695,32 +743,81 @@ def compute_canonical_tick() -> Dict[str, Any]:
     return twin_frame
 
 async def canonical_10hz_producer_loop():
-    global latest_canonical_snapshot
-    print(f"[TWIN_SYNC] Single-worker producer loop started. TWSESSION_OBJECT_ID={hex(id(digital_twin_core_instance))} DIGITAL_TWIN_CORE_OBJECT_ID={hex(id(digital_twin_core_instance))} TELEMETRY_SIMULATOR_OBJECT_ID={hex(id(simulator_instance))}")
+    global latest_canonical_snapshot, scheduler_stats
+    print(f"[TWIN_SYNC] Single-worker producer loop started with overload-aware monotonic scheduler.")
+    
+    last_mono = time.monotonic()
+    window_start = time.monotonic()
+    frames_in_window = 0
+    missed_in_window = 0
+
     while True:
         try:
             t_gen_0 = time.perf_counter()
-            twin_frame = compute_canonical_tick()
-            
+            now_mono = time.monotonic()
+            dt = now_mono - last_mono
+            last_mono = now_mono
+
+            # If loop overran target interval by >20% (>0.12s), record missed deadline
+            if dt > 0.12:
+                scheduler_stats["missed_deadlines"] += 1
+                missed_in_window += 1
+
+            # Advance simulation with real elapsed time dt
+            twin_frame = compute_canonical_tick(dt=dt)
+            frames_in_window += 1
+
+            # Compute rolling status stats every ~1 second (10 frames)
+            elapsed_win = now_mono - window_start
+            if elapsed_win >= 1.0:
+                measured_rate = round(frames_in_window / max(0.1, elapsed_win), 1)
+                scheduler_stats["telemetry_rate_hz"] = measured_rate
+                # AE/XGBoost run every 5 ticks (2 Hz)
+                scheduler_stats["inference_rate_hz"] = round(measured_rate / 5.0, 1)
+
+                if missed_in_window > 0 or measured_rate < 9.5 or scheduler_stats["missed_deadlines"] > 0:
+                    scheduler_stats["system_status_label"] = f"DEGRADED ({measured_rate:.1f} Hz)"
+                else:
+                    scheduler_stats["system_status_label"] = "STABLE (10.0 Hz)"
+
+                window_start = now_mono
+                frames_in_window = 0
+                missed_in_window = 0
+
+            # Attach scheduler telemetry metadata to published twin_frame
+            twin_frame["scheduler_status"] = scheduler_stats["system_status_label"]
+            twin_frame["telemetry_rate_hz"] = scheduler_stats["telemetry_rate_hz"]
+            twin_frame["inference_rate_hz"] = scheduler_stats["inference_rate_hz"]
+            twin_frame["missed_deadlines"] = scheduler_stats["missed_deadlines"]
+
             t_pub_0 = time.perf_counter()
             msg_str = json.dumps(twin_frame, default=safe_json_default)
             await manager.broadcast(msg_str)
             t_pub_1 = time.perf_counter()
 
+            proc_duration_ms = (t_pub_1 - t_gen_0) * 1000.0
+            scheduler_stats["data_latency_ms"] = round(proc_duration_ms, 2)
+            twin_frame["data_latency_ms"] = scheduler_stats["data_latency_ms"]
+
             seq_num = twin_frame.get("sequence_number", 0)
             if seq_num % 50 == 0 or seq_num < 5:
                 telem = twin_frame.get("telemetry", {})
                 sc_name = twin_frame.get("scenario_id") or twin_frame.get("mission_profile") or "CRUISE"
-                print(f"[BACKEND_LATEST] seq={seq_num} time={twin_frame.get('timestamp', 0.0):.1f} state={twin_frame.get('system_state')}")
-                print(f"[LIVE_FRAME_TX] seq={seq_num} time={twin_frame.get('timestamp', 0.0):.1f} state={twin_frame.get('system_state')} scenario={sc_name} cht1={telem.get('cht1', 0):.1f} cht2={telem.get('cht2', 0):.1f} cht3={telem.get('cht3', 0):.1f} cht4={telem.get('cht4', 0):.1f}")
-            
+                print(f"[BACKEND_LATEST] seq={seq_num} time={twin_frame.get('timestamp', 0.0):.1f} state={twin_frame.get('system_state')} scheduler={scheduler_stats['system_status_label']}")
+
             metrics_tracker_instance.record_ws_publish_latency((t_pub_1 - t_pub_0) * 1000.0)
-            metrics_tracker_instance.record_end_to_end_latency((t_pub_1 - t_gen_0) * 1000.0)
+            metrics_tracker_instance.record_end_to_end_latency(proc_duration_ms)
+
+            # Precise sleep to maintain target 0.1s tick
+            elapsed_processing = time.monotonic() - now_mono
+            sleep_time = max(0.0, 0.1 - elapsed_processing)
+            await asyncio.sleep(sleep_time)
+
         except Exception as e:
             print(f"[CANONICAL LOOP ERROR] {e}")
             import traceback
             traceback.print_exc()
-        await asyncio.sleep(0.1)  # 10 Hz broadcast rate
+            await asyncio.sleep(0.1)
 
 @app.on_event("startup")
 async def startup_event():
@@ -756,8 +853,9 @@ async def websocket_telemetry_endpoint(websocket: WebSocket, token: Optional[str
     if latest_canonical_snapshot is not None:
         msg_str = json.dumps(latest_canonical_snapshot, default=safe_json_default)
         try:
-            await websocket.send_text(msg_str)
-            metrics_tracker_instance.record_ws_message()
+            client = manager.active_clients.get(websocket)
+            if client:
+                client.queue.put_nowait(msg_str)
         except Exception:
             pass
     try:
@@ -768,7 +866,6 @@ async def websocket_telemetry_endpoint(websocket: WebSocket, token: Optional[str
         manager.disconnect(websocket)
     except Exception as e:
         manager.disconnect(websocket)
-
 
 if __name__ == "__main__":
     import uvicorn

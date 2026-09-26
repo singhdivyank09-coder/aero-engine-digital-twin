@@ -626,10 +626,14 @@ class TelemetrySimulator:
 
         return raw_copy, display_copy
 
-    def get_next_frame(self) -> Dict[str, Any]:
-        """Generates next 10Hz frame with raw and smoothed telemetry streams."""
+    def get_next_frame(self, dt: float = 0.1) -> Dict[str, Any]:
+        """Generates next frame with raw and smoothed telemetry streams, advancing sim_time by dt."""
         self.step_counter += 1
-        t = self.step_counter * 0.1
+        if not hasattr(self, "sim_time") or self.step_counter == 1:
+            self.sim_time = self.step_counter * 0.1
+        else:
+            self.sim_time += dt
+        t = self.sim_time
 
         # Base Raw Telemetry Generation
         if self.mode.startswith("DATASET_") and self.dataset_generator:

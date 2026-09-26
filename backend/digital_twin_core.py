@@ -78,6 +78,17 @@ class DigitalTwinCore:
             "overall": 98.0
         }
 
+        # Selective ML Model Inference Caches & Frame Sequence Counters
+        self._cached_ae_res = None
+        self._cached_xgb_res = None
+        self._cached_rul_output = None
+        self._cached_gru_res = None
+
+        self._ae_last_seq = 0
+        self._xgb_last_seq = 0
+        self._rul_last_seq = 0
+        self._gru_last_seq = 0
+
     def reset(self):
         """Resets sliding windows, state machine persistent deques, and ML models to clean initial baseline."""
         self.history_window.clear()
@@ -515,36 +526,64 @@ class DigitalTwinCore:
         t_phys_1 = time.perf_counter()
         metrics_tracker_instance.record_physics_latency((t_phys_1 - t_phys_0) * 1000.0)
 
-        # 3-5. Compute Anomaly Metrics, Fault Diagnosis, GRU Short-Horizon Forecast & RUL
-        t_ae_0 = time.perf_counter()
-        ae_res = self.autoencoder.predict_anomaly(telemetry)
-        t_ae_1 = time.perf_counter()
-        metrics_tracker_instance.record_autoencoder_latency((t_ae_1 - t_ae_0) * 1000.0)
+        curr_seq = self.predictive_engine.sequence_number
 
+        # 3. CUSUM Change-Point Detector (10 Hz — Light / Fast)
         t_cusum_0 = time.perf_counter()
         cusum_res = self.cusum.update(telemetry)
         t_cusum_1 = time.perf_counter()
         metrics_tracker_instance.record_cusum_latency((t_cusum_1 - t_cusum_0) * 1000.0)
 
-        xgb_res = self.xgboost.predict_fault(telemetry)
+        # 4. PyTorch Autoencoder Anomaly Detector (2 Hz — Every 5 frames / 500 ms)
+        if self._cached_ae_res is None or curr_seq % 5 == 0:
+            t_ae_0 = time.perf_counter()
+            self._cached_ae_res = self.autoencoder.predict_anomaly(telemetry)
+            t_ae_1 = time.perf_counter()
+            metrics_tracker_instance.record_autoencoder_latency((t_ae_1 - t_ae_0) * 1000.0)
+            self._ae_last_seq = curr_seq
 
-        t_rul_0 = time.perf_counter()
-        rul_output = self.lstm_rul.update_and_predict(telemetry)
-        t_rul_1 = time.perf_counter()
-        metrics_tracker_instance.record_rul_latency((t_rul_1 - t_rul_0) * 1000.0)
+        ae_res = self._cached_ae_res.copy() if isinstance(self._cached_ae_res, dict) else {"anomaly_score": 0.0, "is_anomaly": False}
+        ae_res["inference_frame_seq"] = self._ae_last_seq
+        ae_res["inference_age_sec"] = round(max(0.0, (curr_seq - self._ae_last_seq) * 0.1), 2)
 
-        # Execute GRU Short-Horizon Forecasting (~1 Hz inference / 60-step window)
-        t_gru_0 = time.perf_counter()
-        gru_forecast_res = self.gru_service.predict_forecast(
-            telemetry_history=list(self.history_window_full),
-            timestamp=timestamp,
-            sequence_number=self.predictive_engine.sequence_number,
-            scenario=mission_profile
-        )
-        t_gru_1 = time.perf_counter()
-        gru_status = gru_forecast_res.get("status", "READY") if gru_forecast_res else "WARMING_UP"
-        metrics_tracker_instance.record_gru_latency((t_gru_1 - t_gru_0) * 1000.0, status=gru_status)
-        
+        # 5. XGBoost Fault Classifier (2 Hz — Every 5 frames / 500 ms)
+        if self._cached_xgb_res is None or curr_seq % 5 == 0:
+            self._cached_xgb_res = self.xgboost.predict_fault(telemetry)
+            self._xgb_last_seq = curr_seq
+
+        xgb_res = self._cached_xgb_res.copy() if isinstance(self._cached_xgb_res, dict) else {"fault_type": "NONE", "confidence": 0.99}
+        xgb_res["inference_frame_seq"] = self._xgb_last_seq
+        xgb_res["inference_age_sec"] = round(max(0.0, (curr_seq - self._xgb_last_seq) * 0.1), 2)
+
+        # 6. PyTorch LSTM RUL Estimator (0.2 Hz — Every 50 frames / 5.0 s while maintaining full sequence history)
+        if self._cached_rul_output is None or curr_seq % 50 == 0:
+            t_rul_0 = time.perf_counter()
+            self._cached_rul_output = self.lstm_rul.update_and_predict(telemetry)
+            t_rul_1 = time.perf_counter()
+            metrics_tracker_instance.record_rul_latency((t_rul_1 - t_rul_0) * 1000.0)
+            self._rul_last_seq = curr_seq
+        else:
+            self.lstm_rul.update_history_only(telemetry)
+
+        rul_output = self._cached_rul_output.copy() if isinstance(self._cached_rul_output, dict) else {"display_prediction_cycles": 210.0}
+        rul_output["inference_frame_seq"] = self._rul_last_seq
+        rul_output["inference_age_sec"] = round(max(0.0, (curr_seq - self._rul_last_seq) * 0.1), 2)
+
+        # 7. PyTorch GRU Short-Horizon Forecaster (1 Hz — Every 10 frames / 1.0 s)
+        if self._cached_gru_res is None or curr_seq % 10 == 0:
+            t_gru_0 = time.perf_counter()
+            self._cached_gru_res = self.gru_service.predict_forecast(
+                telemetry_history=list(self.history_window_full),
+                timestamp=timestamp,
+                sequence_number=curr_seq,
+                scenario=mission_profile
+            )
+            t_gru_1 = time.perf_counter()
+            gru_status = self._cached_gru_res.get("status", "READY") if self._cached_gru_res else "WARMING_UP"
+            metrics_tracker_instance.record_gru_latency((t_gru_1 - t_gru_0) * 1000.0, status=gru_status)
+            self._gru_last_seq = curr_seq
+
+        gru_forecast_res = self._cached_gru_res
         self.latest_forecast = gru_forecast_res
         if gru_forecast_res:
             self.forecast_history.append(gru_forecast_res)
@@ -1045,6 +1084,8 @@ class DigitalTwinCore:
                 "cusum": cusum_res
             },
             "anomaly_score": ae_res["anomaly_score"],
+            "inference_frame_seq": ae_res.get("inference_frame_seq", self.predictive_engine.sequence_number),
+            "inference_age_sec": ae_res.get("inference_age_sec", 0.0),
             "fault_evidence": {
                 "xgboost": xgb_res,
                 "active_faults": injected_faults

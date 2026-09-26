@@ -144,6 +144,16 @@ class LstmRulEstimator:
             pickle.dump({"mean": self.mean, "std": self.std}, f)
         print(f"[LSTMRUL] Model trained & saved to {self.model_path}")
 
+    def update_history_only(self, telemetry: Dict[str, Any]):
+        """Updates internal sequence buffer without running PyTorch LSTM neural net inference."""
+        feat_vals = [float(telemetry.get(f, 0.0)) for f in self.FEATURES]
+        if self.mean is not None and self.std is not None:
+            feat_norm = (np.array(feat_vals, dtype=np.float32) - self.mean) / self.std
+        else:
+            feat_norm = np.array(feat_vals, dtype=np.float32)
+        self.sequence_buffer.append(feat_norm)
+        self.valid_sequence_count += 1
+
     def load_model(self) -> bool:
         if os.path.exists(self.model_path) and os.path.exists(self.scaler_path):
             try:

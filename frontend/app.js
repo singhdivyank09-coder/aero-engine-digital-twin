@@ -19,6 +19,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     initCaptchaAndDemoLogin();
     initMissionSelector();
     initFaultButtons();
+    initPlaygroundController();
     initReplayScrubber();
     initReportButtons();
     initLogout();
@@ -200,8 +201,26 @@ function showMainGCS() {
     // Apply RBAC UI restrictions
     if (userRole !== "engineer") {
         document.querySelectorAll(".eng-only").forEach(el => el.classList.add("hidden"));
+        ["btn-start-fault", "btn-pause-fault", "btn-clear-fault"].forEach(id => {
+            const btn = document.getElementById(id);
+            if (btn) {
+                btn.disabled = true;
+                btn.style.opacity = "0.5";
+                btn.style.cursor = "not-allowed";
+                btn.title = "Engineer authorization required to mutate live simulation state. Use Public Fault Playground tab.";
+            }
+        });
     } else {
         document.querySelectorAll(".eng-only").forEach(el => el.classList.remove("hidden"));
+        ["btn-start-fault", "btn-pause-fault", "btn-clear-fault"].forEach(id => {
+            const btn = document.getElementById(id);
+            if (btn) {
+                btn.disabled = false;
+                btn.style.opacity = "1";
+                btn.style.cursor = "pointer";
+                btn.title = "";
+            }
+        });
         loadAuditLogs();
     }
 
@@ -500,6 +519,7 @@ window.twinStore = {
 
 function renderAllModules(frame) {
     if (!frame) return;
+    if (document.hidden) return; // Save CPU resources when tab is inactive
     const targetSnapshot = (window.twinStore && window.twinStore.currentSnapshot) ? window.twinStore.currentSnapshot : frame;
     try { updateGcsDfcsDemonstrator(targetSnapshot); } catch (e) { console.error("Error in updateGcsDfcsDemonstrator:", e); }
     try { updateDashboard(targetSnapshot); } catch (e) { console.error("Error in updateDashboard:", e); }
@@ -643,6 +663,13 @@ function updateDashboard(frame) {
     if (stateBadge) {
         stateBadge.innerText = sysState;
         stateBadge.className = `badge-state ${sysState}`;
+    }
+
+    const schedStatus = frame.scheduler_status || frame.scheduler?.system_status_label || (frame.telemetry_rate_hz ? (frame.telemetry_rate_hz >= 9.5 ? "STABLE (10.0 Hz)" : `DEGRADED (${frame.telemetry_rate_hz.toFixed(1)} Hz)`) : "STABLE (10.0 Hz)");
+    const schedElem = document.getElementById("header-scheduler-status");
+    if (schedElem) {
+        schedElem.innerText = schedStatus;
+        schedElem.className = schedStatus.includes("DEGRADED") ? "hud-val hud-yellow" : "hud-val hud-green";
     }
 
     if (document.getElementById("header-hi")) {
@@ -3871,4 +3898,182 @@ function triggerFaultInjectionWithSafetyCheck(payload) {
 document.addEventListener("DOMContentLoaded", () => {
     initCompoundFaultModal();
 });
+
+// PUBLIC SIMULATED FAULT PLAYGROUND CONTROLLER (100% CLIENT-SIDE)
+let pgState = {
+    scenario: "CYLINDER_THERMAL",
+    isPlaying: false,
+    frameIdx: 0,
+    timer: null,
+    chart: null
+};
+
+function initPlaygroundController() {
+    const selectElem = document.getElementById("playground-scenario-select");
+    const btnPlay = document.getElementById("pg-btn-play");
+    const btnPause = document.getElementById("pg-btn-pause");
+    const btnReset = document.getElementById("pg-btn-reset");
+    const scrubber = document.getElementById("pg-timeline-scrubber");
+
+    if (!selectElem || !btnPlay) return;
+
+    initPlaygroundChart();
+
+    selectElem.addEventListener("change", (e) => {
+        pgState.scenario = e.target.value;
+        pgState.frameIdx = 0;
+        if (scrubber) scrubber.value = 0;
+        updatePlaygroundFrame();
+    });
+
+    btnPlay.addEventListener("click", () => {
+        if (pgState.isPlaying) return;
+        pgState.isPlaying = true;
+        lastPgTime = 0;
+        requestAnimationFrame(playPlaygroundLoop);
+    });
+
+    btnPause.addEventListener("click", () => {
+        pgState.isPlaying = false;
+        if (pgState.timer) {
+            cancelAnimationFrame(pgState.timer);
+            pgState.timer = null;
+        }
+    });
+
+    btnReset.addEventListener("click", () => {
+        pgState.isPlaying = false;
+        if (pgState.timer) cancelAnimationFrame(pgState.timer);
+        pgState.frameIdx = 0;
+        if (scrubber) scrubber.value = 0;
+        updatePlaygroundFrame();
+    });
+
+    if (scrubber) {
+        scrubber.addEventListener("input", (e) => {
+            const sec = parseFloat(e.target.value);
+            pgState.frameIdx = Math.min(599, Math.max(0, Math.floor(sec * 10)));
+            updatePlaygroundFrame();
+        });
+    }
+
+    updatePlaygroundFrame();
+}
+
+let lastPgTime = 0;
+function playPlaygroundLoop(timestamp) {
+    if (!pgState.isPlaying) return;
+    if (!lastPgTime) lastPgTime = timestamp;
+    const elapsed = timestamp - lastPgTime;
+
+    if (elapsed >= 100) {
+        lastPgTime = timestamp;
+        pgState.frameIdx = (pgState.frameIdx + 1) % 600;
+        const scrubber = document.getElementById("pg-timeline-scrubber");
+        if (scrubber) scrubber.value = (pgState.frameIdx * 0.1).toFixed(1);
+        updatePlaygroundFrame();
+    }
+    pgState.timer = requestAnimationFrame(playPlaygroundLoop);
+}
+
+function updatePlaygroundFrame() {
+    if (typeof PLAYGROUND_TRACES === 'undefined' || !PLAYGROUND_TRACES[pgState.scenario]) return;
+
+    const trace = PLAYGROUND_TRACES[pgState.scenario];
+    const frame = trace[pgState.frameIdx] || trace[0];
+
+    const timeDisp = document.getElementById("pg-time-display");
+    if (timeDisp) timeDisp.innerText = `${frame.t.toFixed(1)}s / 60.0s`;
+
+    if (document.getElementById("pg-val-cht1")) document.getElementById("pg-val-cht1").innerText = `${frame.cht1.toFixed(1)} °C`;
+    if (document.getElementById("pg-val-egt1")) document.getElementById("pg-val-egt1").innerText = `${frame.egt1.toFixed(1)} °C`;
+    if (document.getElementById("pg-val-oilp")) document.getElementById("pg-val-oilp").innerText = `${frame.oil_press.toFixed(2)} bar`;
+    if (document.getElementById("pg-val-vib")) document.getElementById("pg-val-vib").innerText = `${frame.vibration_rms.toFixed(2)} g`;
+
+    if (document.getElementById("pg-ae-score")) document.getElementById("pg-ae-score").innerText = frame.ae_score.toFixed(3);
+    if (document.getElementById("pg-system-state")) {
+        const el = document.getElementById("pg-system-state");
+        el.innerText = frame.state;
+        el.className = `gauge-state-badge ${frame.state}`;
+    }
+    if (document.getElementById("pg-fault-diag")) document.getElementById("pg-fault-diag").innerText = frame.fault_diag;
+    if (document.getElementById("pg-confidence")) document.getElementById("pg-confidence").innerText = `${frame.confidence}%`;
+    if (document.getElementById("pg-rul-val")) document.getElementById("pg-rul-val").innerText = `${frame.rul_cycles} cycles`;
+    if (document.getElementById("pg-cusum-state")) {
+        const el = document.getElementById("pg-cusum-state");
+        el.innerText = frame.cusum_state;
+        el.className = `gauge-state-badge ${frame.cusum_state}`;
+    }
+
+    if (pgState.chart) {
+        updatePlaygroundChart(trace, pgState.frameIdx);
+    }
+}
+
+function initPlaygroundChart() {
+    const canvas = document.getElementById("chart-playground-trace");
+    if (!canvas || typeof Chart === 'undefined') return;
+    const ctx = canvas.getContext("2d");
+
+    pgState.chart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: [],
+            datasets: [
+                {
+                    label: 'Telemetry Signal (Recorded)',
+                    data: [],
+                    borderColor: '#2563eb',
+                    backgroundColor: 'rgba(37, 99, 235, 0.08)',
+                    fill: true,
+                    tension: 0.2,
+                    pointRadius: 0
+                },
+                {
+                    label: 'AE Anomaly Score (Recorded)',
+                    data: [],
+                    borderColor: '#dc2626',
+                    borderDash: [4, 4],
+                    tension: 0.2,
+                    pointRadius: 0,
+                    yAxisID: 'y1'
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            animation: false,
+            scales: {
+                x: { display: true, title: { display: true, text: 'Time (s)', font: { size: 10 } } },
+                y: { display: true, title: { display: true, text: 'Telemetry', font: { size: 10 } } },
+                y1: { display: true, position: 'right', min: 0, max: 0.5, grid: { drawOnChartArea: false }, title: { display: true, text: 'AE Score', font: { size: 10 } } }
+            },
+            plugins: {
+                legend: { position: 'top', labels: { boxWidth: 10, font: { size: 10 } } }
+            }
+        }
+    });
+}
+
+function updatePlaygroundChart(trace, currentIdx) {
+    if (!pgState.chart) return;
+    const windowTrace = trace.slice(Math.max(0, currentIdx - 100), currentIdx + 1);
+
+    const keyMap = {
+        "CYLINDER_THERMAL": "cht1",
+        "OIL_PRESSURE": "oil_press",
+        "INCREASING_VIBRATION": "vibration_rms",
+        "SENSOR_DRIFT": "battery_volt",
+        "INTERMITTENT_COMBUSTION": "egt1",
+        "INJECTOR_DISTURBANCE": "fuel_flow"
+    };
+    const sigKey = keyMap[pgState.scenario] || "cht1";
+
+    pgState.chart.data.labels = windowTrace.map(f => `${f.t.toFixed(1)}s`);
+    pgState.chart.data.datasets[0].data = windowTrace.map(f => f[sigKey]);
+    pgState.chart.data.datasets[0].label = `${sigKey.toUpperCase()} (Recorded Demonstration Result)`;
+    pgState.chart.data.datasets[1].data = windowTrace.map(f => f.ae_score);
+    pgState.chart.update('none');
+}
 

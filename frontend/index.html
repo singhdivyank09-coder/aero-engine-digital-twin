@@ -80,6 +80,10 @@
                     <span class="hud-label">SYSTEM STATE</span>
                     <span id="header-state" class="badge-state NORMAL">NORMAL</span>
                 </div>
+                <div class="hud-pill" title="Real-Time Telemetry Rate & Monotonic Scheduler Status">
+                    <span class="hud-label">SCHEDULER RATE</span>
+                    <span class="hud-val hud-green" id="header-scheduler-status">STABLE (10.0 Hz)</span>
+                </div>
                 <div class="hud-pill">
                     <span class="hud-label">HEALTH INDEX</span>
                     <span class="hud-val hud-green" id="header-hi">98.0%</span>
@@ -126,6 +130,10 @@
                     <button class="nav-tab" data-target="view-engineer" title="Fault Injection & Analytics">
                         <i class="fa-solid fa-sliders"></i>
                         <span>Fault Injection & Analytics</span>
+                    </button>
+                    <button class="nav-tab" data-target="view-playground" title="Simulated Fault Playground">
+                        <i class="fa-solid fa-flask-vial text-purple"></i>
+                        <span>Simulated Fault Playground</span>
                     </button>
                     <button class="nav-tab" data-target="view-replay" title="Mission Replay & Reports">
                         <i class="fa-solid fa-clock-rotate-left"></i>
@@ -752,6 +760,23 @@
 
             <!-- 3. FAULT INJECTION & ANALYTICS (ENGINEER ONLY) -->
             <div id="view-engineer" class="tab-content">
+                <!-- MANDATORY ENGINEER ACCESS RESTRICTION NOTICE -->
+                <div id="engineer-access-notice-banner" class="card glass-panel" style="border-left:5px solid #2563eb; background:#eff6ff; margin-bottom:1.2rem; padding:0.75rem 1rem;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5rem;">
+                        <div>
+                            <h4 style="margin:0; color:#1e40af; font-size:0.85rem; font-family:var(--font-display);">
+                                <i class="fa-solid fa-lock text-blue"></i> ENGINEER ACCESS REQUIRED FOR LIVE SIMULATION MUTATION
+                            </h4>
+                            <p style="margin:4px 0 0 0; font-size:0.75rem; color:#1e3a8a; line-height:1.4;">
+                                Live fault injection alters the shared backend simulation state for all active viewers. Only authenticated Engineers can trigger live faults. Public Demo visitors can explore faults safely using the <strong>Simulated Fault Playground</strong> tab without affecting the live backend session.
+                            </p>
+                        </div>
+                        <span class="badge-role eng" style="font-size:0.7rem; background:#dbeafe; color:#1e40af; border:1px solid #bfdbfe; padding:4px 8px; border-radius:6px; font-weight:700;">
+                            <i class="fa-solid fa-shield"></i> AUTHENTICATION ENFORCED
+                        </span>
+                    </div>
+                </div>
+
                 <!-- SIMULATED FAULT INJECTION ACTIVE BANNER (INJECTED CONDITION) -->
                 <div id="simulated-fault-banner-eng" class="card glass-panel hidden" style="border-left:5px solid #ea580c; background:#fff7ed; margin-bottom:1.2rem; padding:0.75rem 1rem;">
                     <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5rem;">
@@ -965,6 +990,105 @@
                         </div>
                     </div>
 
+            <!-- PUBLIC SIMULATED FAULT PLAYGROUND (CLIENT-SIDE DEMO) -->
+            <div id="view-playground" class="tab-content">
+                <div class="card glass-panel" style="border-left:5px solid #7c3aed; background:#faf5ff; margin-bottom:1.2rem; padding:0.85rem 1.1rem;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5rem;">
+                        <div>
+                            <h3 style="margin:0; color:#5b21b6; font-size:1.05rem; font-family:var(--font-display);">
+                                <i class="fa-solid fa-flask-vial text-purple"></i> PUBLIC SIMULATED FAULT PLAYGROUND (CLIENT-SIDE DEMO)
+                            </h3>
+                            <p style="margin:4px 0 0 0; font-size:0.8rem; color:#6b21a8; line-height:1.4;">
+                                Explore precomputed fault scenarios safely in your browser. All data runs 100% client-side with zero impact on the live backend flight session.
+                            </p>
+                        </div>
+                        <span style="background:#ede9fe; color:#6d28d9; border:1px solid #ddd6fe; padding:4px 10px; border-radius:6px; font-weight:800; font-size:0.75rem;">
+                            <i class="fa-solid fa-circle-check"></i> RECORDED DEMONSTRATION RESULTS
+                        </span>
+                    </div>
+                </div>
+
+                <div class="grid-2col" style="gap:1.5rem;">
+                    <!-- LEFT: PLAYGROUND TRACE SELECTOR & PLAYBACK CONTROLS -->
+                    <div class="card glass-panel">
+                        <h3 style="margin-top:0; margin-bottom:0.5rem;"><i class="fa-solid fa-sliders text-purple"></i> Select Fault Trace Scenario</h3>
+                        
+                        <div style="background:#f8fafc; border:1px solid var(--border-light); border-radius:10px; padding:0.85rem; margin-bottom:1rem;">
+                            <label style="font-weight:700; color:var(--text-secondary); display:block; margin-bottom:6px; font-size:0.82rem;">Precomputed Scenario:</label>
+                            <select id="playground-scenario-select" style="width:100%; padding:0.5rem; border-radius:6px; border:1px solid var(--border-light); background:#ffffff; font-weight:600; font-size:0.85rem; margin-bottom:0.85rem;">
+                                <option value="CYLINDER_THERMAL" selected>Cylinder 1 Thermal Degradation (CHT Rise & Overheating)</option>
+                                <option value="OIL_PRESSURE">Oil Pressure Loss & Thermal Spike (Lubrication Failure)</option>
+                                <option value="INCREASING_VIBRATION">Mechanical Crankshaft Bearing Wear (Increasing Vibration RMS)</option>
+                                <option value="SENSOR_DRIFT">Electrical Bus Sensor Bias & Drift</option>
+                                <option value="INTERMITTENT_COMBUSTION">Cylinder 3 Misfire & Intermittent Combustion Pulsing</option>
+                                <option value="INJECTOR_DISTURBANCE">Cylinder 2 Fuel Injector Abnormality</option>
+                            </select>
+
+                            <!-- PLAYBACK BUTTONS -->
+                            <div style="display:flex; gap:0.6rem; margin-bottom:0.85rem;">
+                                <button id="pg-btn-play" class="btn btn-primary btn-glow" style="flex:1;"><i class="fa-solid fa-play"></i> Play Simulation</button>
+                                <button id="pg-btn-pause" class="btn btn-secondary" style="flex:1;"><i class="fa-solid fa-pause"></i> Pause</button>
+                                <button id="pg-btn-reset" class="btn btn-secondary" style="flex:1;"><i class="fa-solid fa-rotate-left"></i> Reset</button>
+                            </div>
+
+                            <!-- TIMELINE SCRUBBER -->
+                            <div>
+                                <div style="display:flex; justify-content:space-between; font-size:0.78rem; font-weight:700; margin-bottom:4px;">
+                                    <span>Timeline Scrubber:</span>
+                                    <span id="pg-time-display">0.0s / 60.0s</span>
+                                </div>
+                                <input type="range" id="pg-timeline-scrubber" min="0" max="60" step="0.5" value="0" style="width:100%; cursor:pointer;">
+                            </div>
+                        </div>
+
+                        <!-- PLAYGROUND METRICS SUMMARY TABLE -->
+                        <div style="border-top:1px solid var(--border-light); padding-top:0.85rem;">
+                            <h4 style="margin:0 0 0.5rem 0; font-size:0.85rem; font-family:var(--font-display);"><i class="fa-solid fa-gauge"></i> Recorded Telemetry Readouts</h4>
+                            <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.5rem; font-size:0.78rem;">
+                                <div style="background:#f1f5f9; padding:6px 10px; border-radius:6px;">
+                                    <span style="color:#64748b; display:block;">CHT 1:</span>
+                                    <strong id="pg-val-cht1" style="font-size:0.9rem;">120.0 °C</strong>
+                                </div>
+                                <div style="background:#f1f5f9; padding:6px 10px; border-radius:6px;">
+                                    <span style="color:#64748b; display:block;">EGT 1:</span>
+                                    <strong id="pg-val-egt1" style="font-size:0.9rem;">748.0 °C</strong>
+                                </div>
+                                <div style="background:#f1f5f9; padding:6px 10px; border-radius:6px;">
+                                    <span style="color:#64748b; display:block;">Oil Pressure:</span>
+                                    <strong id="pg-val-oilp" style="font-size:0.9rem;">4.20 bar</strong>
+                                </div>
+                                <div style="background:#f1f5f9; padding:6px 10px; border-radius:6px;">
+                                    <span style="color:#64748b; display:block;">Vibration RMS:</span>
+                                    <strong id="pg-val-vib" style="font-size:0.9rem;">1.12 g</strong>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- RIGHT: PLAYGROUND GRAPH & AI PREDICTIONS -->
+                    <div style="display:flex; flex-direction:column; gap:1.25rem;">
+                        <div class="card glass-panel" style="border-left:5px solid var(--primary-blue);">
+                            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.65rem;">
+                                <h3 style="margin:0; font-size:0.95rem;"><i class="fa-solid fa-brain text-purple"></i> Precomputed AI Model Diagnostics</h3>
+                                <span style="background:#fef3c7; color:#92400e; border:1px solid #fde68a; font-size:0.68rem; padding:2px 6px; border-radius:4px; font-weight:700;">
+                                    RECORDED DEMONSTRATION RESULTS
+                                </span>
+                            </div>
+                            
+                            <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.6rem; font-size:0.78rem; background:#f8fafc; padding:0.75rem; border-radius:8px; border:1px solid var(--border-light); margin-bottom:0.75rem;">
+                                <div><strong>Autoencoder Score:</strong> <span id="pg-ae-score" style="font-weight:700;">0.015</span></div>
+                                <div><strong>Diagnostic State:</strong> <span id="pg-system-state" class="gauge-state-badge NORMAL">NORMAL</span></div>
+                                <div><strong>XGBoost Diagnosis:</strong> <span id="pg-fault-diag" style="font-weight:700;">None</span></div>
+                                <div><strong>Confidence:</strong> <span id="pg-confidence" style="font-weight:700;">100%</span></div>
+                                <div><strong>LSTM Est. RUL:</strong> <span id="pg-rul-val" style="font-weight:700;">210 cycles</span></div>
+                                <div><strong>CUSUM State:</strong> <span id="pg-cusum-state" class="gauge-state-badge NORMAL">NORMAL</span></div>
+                            </div>
+
+                            <div style="height:180px;">
+                                <canvas id="chart-playground-trace"></canvas>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -1807,6 +1931,7 @@
         </div>
     </div>
 
-    <script src="/static/app.js?v=7"></script>
+    <script src="/static/playground_traces.js?v=1"></script>
+    <script src="/static/app.js?v=8"></script>
 </body>
 </html>
