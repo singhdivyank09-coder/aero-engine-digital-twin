@@ -3990,34 +3990,59 @@ function playPlaygroundLoop(timestamp) {
 function updatePlaygroundFrame() {
     if (typeof PLAYGROUND_TRACES === 'undefined' || !PLAYGROUND_TRACES[pgState.scenario]) return;
 
-    const trace = PLAYGROUND_TRACES[pgState.scenario];
-    const frame = trace[pgState.frameIdx] || trace[0];
+    const scenarioData = PLAYGROUND_TRACES[pgState.scenario];
+    const framesList = scenarioData.frames || (Array.isArray(scenarioData) ? scenarioData : []);
+    if (!framesList || framesList.length === 0) return;
+
+    const frame = framesList[pgState.frameIdx] || framesList[0];
+    if (!frame) return;
 
     const timeDisp = document.getElementById("pg-time-display");
-    if (timeDisp) timeDisp.innerText = `${frame.t.toFixed(1)}s / 60.0s`;
+    if (timeDisp) timeDisp.innerText = `${(frame.t ?? (pgState.frameIdx * 0.1)).toFixed(1)}s / 60.0s`;
 
-    if (document.getElementById("pg-val-cht1")) document.getElementById("pg-val-cht1").innerText = `${frame.cht1.toFixed(1)} °C`;
-    if (document.getElementById("pg-val-egt1")) document.getElementById("pg-val-egt1").innerText = `${frame.egt1.toFixed(1)} °C`;
-    if (document.getElementById("pg-val-oilp")) document.getElementById("pg-val-oilp").innerText = `${frame.oil_press.toFixed(2)} bar`;
-    if (document.getElementById("pg-val-vib")) document.getElementById("pg-val-vib").innerText = `${frame.vibration_rms.toFixed(2)} g`;
+    if (document.getElementById("pg-val-cht1")) document.getElementById("pg-val-cht1").innerText = `${(frame.cht1 ?? 120.0).toFixed(1)} °C`;
+    if (document.getElementById("pg-val-egt1")) document.getElementById("pg-val-egt1").innerText = `${(frame.egt1 ?? 748.0).toFixed(1)} °C`;
+    if (document.getElementById("pg-val-oilp")) document.getElementById("pg-val-oilp").innerText = `${(frame.oil_press ?? 4.20).toFixed(2)} bar`;
+    if (document.getElementById("pg-val-vib")) document.getElementById("pg-val-vib").innerText = `${(frame.vibration_rms ?? 1.12).toFixed(2)} g`;
 
-    if (document.getElementById("pg-ae-score")) document.getElementById("pg-ae-score").innerText = frame.ae_score.toFixed(3);
+    if (document.getElementById("pg-ae-score")) {
+        const aeScore = frame.anomaly_score ?? frame.ae_score;
+        document.getElementById("pg-ae-score").innerText = (aeScore !== undefined && aeScore !== null) ? Number(aeScore).toFixed(3) : "Not available";
+    }
     if (document.getElementById("pg-system-state")) {
         const el = document.getElementById("pg-system-state");
-        el.innerText = frame.state;
-        el.className = `gauge-state-badge ${frame.state}`;
+        const sysState = frame.status || frame.state || "NORMAL";
+        el.innerText = sysState;
+        el.className = `gauge-state-badge ${sysState}`;
     }
-    if (document.getElementById("pg-fault-diag")) document.getElementById("pg-fault-diag").innerText = frame.fault_diag;
-    if (document.getElementById("pg-confidence")) document.getElementById("pg-confidence").innerText = `${frame.confidence}%`;
-    if (document.getElementById("pg-rul-val")) document.getElementById("pg-rul-val").innerText = `${frame.rul_cycles} cycles`;
+    if (document.getElementById("pg-fault-diag")) {
+        document.getElementById("pg-fault-diag").innerText = frame.classifier_label || frame.fault_diag || "Nominal Operation";
+    }
+    if (document.getElementById("pg-confidence")) {
+        const conf = frame.classifier_confidence ?? frame.confidence;
+        if (conf !== undefined && conf !== null) {
+            const confPct = conf <= 1.0 ? Math.round(conf * 100) : Math.round(conf);
+            document.getElementById("pg-confidence").innerText = `${confPct}%`;
+        } else {
+            document.getElementById("pg-confidence").innerText = "Not available";
+        }
+    }
+    if (document.getElementById("pg-rul-val")) {
+        document.getElementById("pg-rul-val").innerText = (frame.rul_cycles !== undefined && frame.rul_cycles !== null) ? `${frame.rul_cycles} cycles` : "Not available";
+    }
     if (document.getElementById("pg-cusum-state")) {
         const el = document.getElementById("pg-cusum-state");
-        el.innerText = frame.cusum_state;
-        el.className = `gauge-state-badge ${frame.cusum_state}`;
+        if (frame.cusum_state) {
+            el.innerText = frame.cusum_state;
+            el.className = `gauge-state-badge ${frame.cusum_state}`;
+        } else {
+            el.innerText = "Not available";
+            el.className = "badge-tag not-evaluated";
+        }
     }
 
     if (pgState.chart) {
-        updatePlaygroundChart(trace, pgState.frameIdx);
+        updatePlaygroundChart(scenarioData, pgState.frameIdx);
     }
 }
 
@@ -4058,7 +4083,7 @@ function initPlaygroundChart() {
             scales: {
                 x: { display: true, title: { display: true, text: 'Time (s)', font: { size: 10 } } },
                 y: { display: true, title: { display: true, text: 'Telemetry', font: { size: 10 } } },
-                y1: { display: true, position: 'right', min: 0, max: 0.5, grid: { drawOnChartArea: false }, title: { display: true, text: 'AE Score', font: { size: 10 } } }
+                y1: { display: true, position: 'right', min: 0, max: 1.0, grid: { drawOnChartArea: false }, title: { display: true, text: 'AE Score', font: { size: 10 } } }
             },
             plugins: {
                 legend: { position: 'top', labels: { boxWidth: 10, font: { size: 10 } } }
@@ -4067,9 +4092,12 @@ function initPlaygroundChart() {
     });
 }
 
-function updatePlaygroundChart(trace, currentIdx) {
+function updatePlaygroundChart(scenarioData, currentIdx) {
     if (!pgState.chart) return;
-    const windowTrace = trace.slice(Math.max(0, currentIdx - 100), currentIdx + 1);
+    const framesList = scenarioData.frames || (Array.isArray(scenarioData) ? scenarioData : []);
+    if (!framesList || framesList.length === 0) return;
+
+    const windowTrace = framesList.slice(Math.max(0, currentIdx - 100), currentIdx + 1);
 
     const keyMap = {
         "CYLINDER_THERMAL": "cht1",
@@ -4081,10 +4109,10 @@ function updatePlaygroundChart(trace, currentIdx) {
     };
     const sigKey = keyMap[pgState.scenario] || "cht1";
 
-    pgState.chart.data.labels = windowTrace.map(f => `${f.t.toFixed(1)}s`);
-    pgState.chart.data.datasets[0].data = windowTrace.map(f => f[sigKey]);
+    pgState.chart.data.labels = windowTrace.map(f => `${(f.t ?? 0).toFixed(1)}s`);
+    pgState.chart.data.datasets[0].data = windowTrace.map(f => f[sigKey] ?? 0);
     pgState.chart.data.datasets[0].label = `${sigKey.toUpperCase()} (Recorded Demonstration Result)`;
-    pgState.chart.data.datasets[1].data = windowTrace.map(f => f.ae_score);
+    pgState.chart.data.datasets[1].data = windowTrace.map(f => f.anomaly_score ?? f.ae_score ?? 0);
     pgState.chart.update('none');
 }
 

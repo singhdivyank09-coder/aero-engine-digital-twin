@@ -775,10 +775,10 @@ async def canonical_10hz_producer_loop():
                 # AE/XGBoost run every 5 ticks (2 Hz)
                 scheduler_stats["inference_rate_hz"] = round(measured_rate / 5.0, 1)
 
-                if missed_in_window > 0 or measured_rate < 9.5 or scheduler_stats["missed_deadlines"] > 0:
+                if missed_in_window > 0 or measured_rate < 9.5:
                     scheduler_stats["system_status_label"] = f"DEGRADED ({measured_rate:.1f} Hz)"
                 else:
-                    scheduler_stats["system_status_label"] = "STABLE (10.0 Hz)"
+                    scheduler_stats["system_status_label"] = f"STABLE ({measured_rate:.1f} Hz)"
 
                 window_start = now_mono
                 frames_in_window = 0
