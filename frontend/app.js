@@ -14,17 +14,24 @@ let sampleMissionData = null;
 let lastHeaderRulWindowId = undefined;
 
 document.addEventListener("DOMContentLoaded", async () => {
+    // 1. Register essential navigation, login, logout, and server connection handlers first
     initNavigationTabs();
     initLoginForm();
     initCaptchaAndDemoLogin();
     initMissionSelector();
     initFaultButtons();
-    initPlaygroundController();
     initReplayScrubber();
     initReportButtons();
     initLogout();
     initTwinComponentInteractions();
     checkServerConnection();
+
+    // 2. Initialize optional Public Fault Playground with isolated error handling
+    try {
+        initPlaygroundController();
+    } catch (pgErr) {
+        console.error("Playground initialization warning (isolated):", pgErr);
+    }
 
     if (!authToken) {
         showLoginModal();
@@ -46,12 +53,12 @@ async function checkServerConnection() {
     try {
         const res = await fetch(`${API_BASE}/api/health`);
         if (res.ok) {
-            statusDiv.innerHTML = `<i class="fa-solid fa-circle-check text-green"></i> Backend Server Connected `;
+            statusDiv.innerHTML = `<i class="fa-solid fa-circle-check text-green"></i> Backend Server Connected`;
         } else {
             throw new Error(`HTTP ${res.status}`);
         }
     } catch(e) {
-        statusDiv.innerHTML = `<i class="fa-solid fa-triangle-exclamation text-red"></i> Connecting to backend server... <br><span style="font-size:0.7rem; color:#94a3b8">Press <strong>Ctrl + F5</strong> if server was just restarted.</span>`;
+        statusDiv.innerHTML = `<i class="fa-solid fa-circle-notch fa-spin text-blue"></i> Connecting to Aero Digital Twin Server... <br><span style="font-size:0.7rem; color:#94a3b8">Server warming up, please wait...</span>`;
         setTimeout(checkServerConnection, 2000);
     }
 }
@@ -3909,55 +3916,59 @@ let pgState = {
 };
 
 function initPlaygroundController() {
-    const selectElem = document.getElementById("playground-scenario-select");
-    const btnPlay = document.getElementById("pg-btn-play");
-    const btnPause = document.getElementById("pg-btn-pause");
-    const btnReset = document.getElementById("pg-btn-reset");
-    const scrubber = document.getElementById("pg-timeline-scrubber");
+    try {
+        const selectElem = document.getElementById("playground-scenario-select");
+        const btnPlay = document.getElementById("pg-btn-play");
+        const btnPause = document.getElementById("pg-btn-pause");
+        const btnReset = document.getElementById("pg-btn-reset");
+        const scrubber = document.getElementById("pg-timeline-scrubber");
 
-    if (!selectElem || !btnPlay) return;
+        if (!selectElem || !btnPlay) return;
 
-    initPlaygroundChart();
+        initPlaygroundChart();
 
-    selectElem.addEventListener("change", (e) => {
-        pgState.scenario = e.target.value;
-        pgState.frameIdx = 0;
-        if (scrubber) scrubber.value = 0;
-        updatePlaygroundFrame();
-    });
-
-    btnPlay.addEventListener("click", () => {
-        if (pgState.isPlaying) return;
-        pgState.isPlaying = true;
-        lastPgTime = 0;
-        requestAnimationFrame(playPlaygroundLoop);
-    });
-
-    btnPause.addEventListener("click", () => {
-        pgState.isPlaying = false;
-        if (pgState.timer) {
-            cancelAnimationFrame(pgState.timer);
-            pgState.timer = null;
-        }
-    });
-
-    btnReset.addEventListener("click", () => {
-        pgState.isPlaying = false;
-        if (pgState.timer) cancelAnimationFrame(pgState.timer);
-        pgState.frameIdx = 0;
-        if (scrubber) scrubber.value = 0;
-        updatePlaygroundFrame();
-    });
-
-    if (scrubber) {
-        scrubber.addEventListener("input", (e) => {
-            const sec = parseFloat(e.target.value);
-            pgState.frameIdx = Math.min(599, Math.max(0, Math.floor(sec * 10)));
+        selectElem.addEventListener("change", (e) => {
+            pgState.scenario = e.target.value;
+            pgState.frameIdx = 0;
+            if (scrubber) scrubber.value = 0;
             updatePlaygroundFrame();
         });
-    }
 
-    updatePlaygroundFrame();
+        btnPlay.addEventListener("click", () => {
+            if (pgState.isPlaying) return;
+            pgState.isPlaying = true;
+            lastPgTime = 0;
+            requestAnimationFrame(playPlaygroundLoop);
+        });
+
+        btnPause.addEventListener("click", () => {
+            pgState.isPlaying = false;
+            if (pgState.timer) {
+                cancelAnimationFrame(pgState.timer);
+                pgState.timer = null;
+            }
+        });
+
+        btnReset.addEventListener("click", () => {
+            pgState.isPlaying = false;
+            if (pgState.timer) cancelAnimationFrame(pgState.timer);
+            pgState.frameIdx = 0;
+            if (scrubber) scrubber.value = 0;
+            updatePlaygroundFrame();
+        });
+
+        if (scrubber) {
+            scrubber.addEventListener("input", (e) => {
+                const sec = parseFloat(e.target.value);
+                pgState.frameIdx = Math.min(599, Math.max(0, Math.floor(sec * 10)));
+                updatePlaygroundFrame();
+            });
+        }
+
+        updatePlaygroundFrame();
+    } catch (err) {
+        console.warn("Playground initialization safely caught error:", err);
+    }
 }
 
 let lastPgTime = 0;

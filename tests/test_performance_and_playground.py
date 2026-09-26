@@ -193,3 +193,28 @@ def test_playground_traces_file_exists_and_valid():
     assert "SENSOR_DRIFT" in content
     assert "INTERMITTENT_COMBUSTION" in content
     assert "INJECTOR_DISTURBANCE" in content
+
+def test_no_localhost_hardcoded_in_connection_status():
+    """Verifies that 127.0.0.1:8000 is NOT hardcoded in login-server-status HTML or JS connection status innerHTML."""
+    html_path = os.path.join(os.path.dirname(__file__), "..", "frontend", "index.html")
+    js_path = os.path.join(os.path.dirname(__file__), "..", "frontend", "app.js")
+
+    with open(html_path, "r", encoding="utf-8") as f:
+        html_content = f.read()
+    with open(js_path, "r", encoding="utf-8") as f:
+        js_content = f.read()
+
+    # Check index.html line around login-server-status
+    assert "Connecting to backend server (127.0.0.1:8000)" not in html_content
+    assert "Connecting to Aero Digital Twin Server..." in html_content
+
+    # Check app.js innerHTML assignments for checkServerConnection
+    assert "Backend Server Connected (127.0.0.1:8000)" not in js_content
+
+def test_api_health_endpoint():
+    """Verifies GET /api/health responds with 200 OK and valid status json."""
+    resp = client.get("/api/health")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data.get("status") == "ok"
+    assert "system" in data
