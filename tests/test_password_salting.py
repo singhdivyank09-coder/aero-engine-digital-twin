@@ -63,10 +63,10 @@ def test_captcha_action_and_hostname_validation(monkeypatch):
     monkeypatch.setattr(urllib.request, "urlopen", lambda req, timeout=8: MockUrlOpen(fake_response))
 
     # Matching action and matching hostname -> True
-    assert verify_turnstile_captcha("token_123", client_ip="1.2.3.4", request_host="aero-engine-digital-twin.onrender.com", expected_action="demo_login") is True
+    assert verify_turnstile_captcha("token_123", client_ip="1.2.3.4", expected_action="demo_login") is True
 
     # Action mismatch -> False
-    assert verify_turnstile_captcha("token_456", client_ip="1.2.3.4", request_host="aero-engine-digital-twin.onrender.com", expected_action="other_action") is False
+    assert verify_turnstile_captcha("token_456", client_ip="1.2.3.4", expected_action="other_action") is False
 
     # Hostname mismatch -> False
     fake_response_bad_host = {
@@ -75,26 +75,41 @@ def test_captcha_action_and_hostname_validation(monkeypatch):
         "hostname": "malicious-site.com"
     }
     monkeypatch.setattr(urllib.request, "urlopen", lambda req, timeout=8: MockUrlOpen(fake_response_bad_host))
-    assert verify_turnstile_captcha("token_789", client_ip="1.2.3.4", request_host="aero-engine-digital-twin.onrender.com", expected_action="demo_login") is False
+    assert verify_turnstile_captcha("token_789", client_ip="1.2.3.4", expected_action="demo_login") is False
+
+    # Production mode: Missing action or missing hostname must be rejected
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    fake_response_missing_action = {
+        "success": True,
+        "action": "",
+        "hostname": "aero-engine-digital-twin.onrender.com"
+    }
+    monkeypatch.setattr(urllib.request, "urlopen", lambda req, timeout=8: MockUrlOpen(fake_response_missing_action))
+    assert verify_turnstile_captcha("token_missing_act", client_ip="1.2.3.4", expected_action="demo_login") is False
 
 def test_per_ip_rate_limiting():
-    # Make multiple demo logins from IP A until rate limited
-    headers_ip_a = {"X-Forwarded-For": "203.0.113.195"}
-    headers_ip_b = {"X-Forwarded-For": "198.51.100.42"}
+    from backend.main import rate_limit_tracker
+    rate_limit_tracker.clear()
+    try:
+        # Make multiple demo logins from IP A until rate limited
+        headers_ip_a = {"X-Forwarded-For": "203.0.113.195"}
+        headers_ip_b = {"X-Forwarded-For": "198.51.100.42"}
 
-    # IP B should succeed even if IP A gets rate limited
-    res_b = client.post("/api/auth/demo-login", json={"captcha_token": "valid_captcha_token"}, headers=headers_ip_b)
-    assert res_b.status_code == 200
+        # IP B should succeed even if IP A gets rate limited
+        res_b = client.post("/api/auth/demo-login", json={"captcha_token": "valid_captcha_token"}, headers=headers_ip_b)
+        assert res_b.status_code == 200
 
-    # Flood IP A
-    for _ in range(12):
-        client.post("/api/auth/demo-login", json={"captcha_token": "valid_captcha_token"}, headers=headers_ip_a)
+        # Flood IP A
+        for _ in range(12):
+            client.post("/api/auth/demo-login", json={"captcha_token": "valid_captcha_token"}, headers=headers_ip_a)
 
-    # IP A should now be rate limited (429)
-    res_a_blocked = client.post("/api/auth/demo-login", json={"captcha_token": "valid_captcha_token"}, headers=headers_ip_a)
-    assert res_a_blocked.status_code == 429
-    assert "Too many login attempts from your IP" in res_a_blocked.json()["detail"]
+        # IP A should now be rate limited (429)
+        res_a_blocked = client.post("/api/auth/demo-login", json={"captcha_token": "valid_captcha_token"}, headers=headers_ip_a)
+        assert res_a_blocked.status_code == 429
+        assert "Too many login attempts from your IP" in res_a_blocked.json()["detail"]
 
-    # IP B should STILL be allowed
-    res_b_ok = client.post("/api/auth/demo-login", json={"captcha_token": "valid_captcha_token"}, headers=headers_ip_b)
-    assert res_b_ok.status_code in [200, 400]  # Not 429!
+        # IP B should STILL be allowed
+        res_b_ok = client.post("/api/auth/demo-login", json={"captcha_token": "valid_captcha_token"}, headers=headers_ip_b)
+        assert res_b_ok.status_code in [200, 400]  # Not 429!
+    finally:
+        rate_limit_tracker.clear()
