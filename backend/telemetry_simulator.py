@@ -12,7 +12,7 @@ Provides:
 import math
 import time
 import numpy as np
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 from collections import deque
 from ml_service.canonical_schema import CanonicalEngineState
 from ml_service.dataset_loader import CMapssDatasetLoader, AlfaDatasetLoader, RflyMadDatasetLoader, UavFdDatasetLoader
