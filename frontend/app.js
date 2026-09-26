@@ -16,6 +16,7 @@ let lastHeaderRulWindowId = undefined;
 document.addEventListener("DOMContentLoaded", async () => {
     initNavigationTabs();
     initLoginForm();
+    initCaptchaAndDemoLogin();
     initMissionSelector();
     initFaultButtons();
     initReplayScrubber();
@@ -49,9 +50,86 @@ async function checkServerConnection() {
             throw new Error(`HTTP ${res.status}`);
         }
     } catch(e) {
-        statusDiv.innerHTML = `<i class="fa-solid fa-triangle-exclamation text-red"></i> Connecting to 127.0.0.1:8000... <br><span style="font-size:0.7rem; color:#94a3b8">Press <strong>Ctrl + F5</strong> if server was just restarted.</span>`;
+        statusDiv.innerHTML = `<i class="fa-solid fa-triangle-exclamation text-red"></i> Connecting to backend server... <br><span style="font-size:0.7rem; color:#94a3b8">Press <strong>Ctrl + F5</strong> if server was just restarted.</span>`;
         setTimeout(checkServerConnection, 2000);
     }
+}
+
+async function initCaptchaAndDemoLogin() {
+    const turnstileContainer = document.getElementById("turnstile-container");
+    const btnDemo = document.getElementById("btn-demo-login");
+    if (!btnDemo) return;
+
+    let siteKey = "";
+    try {
+        const res = await fetch(`${API_BASE}/api/auth/captcha-config`);
+        if (res.ok) {
+            const cfg = await res.json();
+            siteKey = cfg.site_key || "";
+        }
+    } catch(e) {}
+
+    if (siteKey && window.turnstile && turnstileContainer) {
+        turnstileContainer.innerHTML = `<div id="cf-turnstile-widget"></div>`;
+        try {
+            turnstile.render("#cf-turnstile-widget", {
+                sitekey: siteKey,
+                theme: "light",
+                callback: function(token) {
+                    window.lastTurnstileToken = token;
+                }
+            });
+        } catch(e) {
+            console.error("Turnstile render error:", e);
+        }
+    }
+
+    btnDemo.addEventListener("click", async () => {
+        const errorDiv = document.getElementById("login-error");
+        if (errorDiv) errorDiv.innerText = "";
+
+        let captchaToken = window.lastTurnstileToken || "";
+        if (window.turnstile && siteKey) {
+            try {
+                captchaToken = turnstile.getResponse() || window.lastTurnstileToken || "";
+            } catch(e) {}
+        }
+
+        if (!captchaToken && !siteKey) {
+            captchaToken = "valid_captcha_token";
+        }
+
+        try {
+            const res = await fetch(`${API_BASE}/api/auth/demo-login`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ captcha_token: captchaToken })
+            });
+
+            if (!res.ok) {
+                const errData = await res.json().catch(() => ({ detail: "Demo authentication failed." }));
+                if (errorDiv) errorDiv.innerText = typeof errData.detail === "string" ? errData.detail : "CAPTCHA verification failed.";
+                if (window.turnstile && siteKey) {
+                    try { turnstile.reset(); } catch(e){}
+                }
+                return;
+            }
+
+            const data = await res.json();
+            authToken = data.access_token;
+            userRole = data.role;
+            userName = data.full_name;
+
+            localStorage.setItem("dt_token", authToken);
+            localStorage.setItem("dt_role", userRole);
+            localStorage.setItem("dt_name", userName);
+
+            showMainGCS();
+        } catch (err) {
+            console.error("Demo login fetch error:", err);
+            if (errorDiv) errorDiv.innerText = `Network connection error (${err.message}).`;
+        }
+    });
 }
 
 // LOGIN & AUTHENTICATION
@@ -64,7 +142,7 @@ function initLoginForm() {
         const username = document.getElementById("username").value.trim();
         const password = document.getElementById("password").value.trim();
         const errorDiv = document.getElementById("login-error");
-        errorDiv.innerText = "";
+        if (errorDiv) errorDiv.innerText = "";
 
         let loginSuccess = false;
         try {
@@ -76,7 +154,7 @@ function initLoginForm() {
 
             if (!res.ok) {
                 const errData = await res.json().catch(() => ({ detail: "Authentication failed." }));
-                errorDiv.innerText = typeof errData.detail === "string" ? errData.detail : "Invalid username or password.";
+                if (errorDiv) errorDiv.innerText = typeof errData.detail === "string" ? errData.detail : "Invalid username or password.";
                 return;
             }
 
@@ -92,7 +170,7 @@ function initLoginForm() {
             loginSuccess = true;
         } catch (err) {
             console.error("Login fetch error:", err);
-            errorDiv.innerText = `Network connection error (${err.message}). Is server running on 127.0.0.1:8000?`;
+            if (errorDiv) errorDiv.innerText = `Network connection error (${err.message}).`;
             return;
         }
 
@@ -112,7 +190,11 @@ function showMainGCS() {
 
     document.getElementById("user-display-name").innerText = userName;
     document.getElementById("user-role-badge").innerText = userRole.toUpperCase();
-    document.getElementById("user-role-badge").className = `badge-role ${userRole === 'engineer' ? 'eng' : 'op'}`;
+    
+    let roleClass = "op";
+    if (userRole === "engineer") roleClass = "eng";
+    else if (userRole === "demo") roleClass = "op";
+    document.getElementById("user-role-badge").className = `badge-role ${roleClass}`;
 
     // Apply RBAC UI restrictions
     if (userRole !== "engineer") {
@@ -120,6 +202,10 @@ function showMainGCS() {
     } else {
         document.querySelectorAll(".eng-only").forEach(el => el.classList.remove("hidden"));
         loadAuditLogs();
+    }
+
+    if (userRole === "demo") {
+        document.querySelectorAll(".demo-hide").forEach(el => el.classList.add("hidden"));
     }
 
     initTelemetryChart();

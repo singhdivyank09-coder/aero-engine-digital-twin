@@ -154,26 +154,69 @@ def init_db():
     """)
 
     # Seed or Update Default Users
+    op_user = os.getenv("DEMO_OPERATOR_USERNAME", "operator")
     op_password = os.getenv("DEMO_OPERATOR_PASSWORD", "operator123")
+    eng_user = os.getenv("DEMO_ENGINEER_USERNAME", "engineer")
     eng_password = os.getenv("DEMO_ENGINEER_PASSWORD", "engineer123")
 
-    op_pass_hash = get_password_hash(op_password)
-    eng_pass_hash = get_password_hash(eng_password)
+    op_pass_hash = get_password_hash(op_password, op_user)
+    eng_pass_hash = get_password_hash(eng_password, eng_user)
 
-    cursor.execute("SELECT COUNT(*) as count FROM users;")
-    if cursor.fetchone()["count"] == 0:
+    cursor.execute("SELECT * FROM users WHERE username = ?;", (op_user,))
+    if not cursor.fetchone():
         cursor.execute("INSERT INTO users (username, password_hash, role, full_name) VALUES (?, ?, ?, ?);",
-                       ("operator", op_pass_hash, "operator", "UAV Flight Operator - GCS Alpha"))
-        cursor.execute("INSERT INTO users (username, password_hash, role, full_name) VALUES (?, ?, ?, ?);",
-                       ("engineer", eng_pass_hash, "engineer", "Demo Prototype Operator"))
+                       (op_user, op_pass_hash, "operator", "UAV Flight Operator"))
     else:
-        # Update user password hashes if environment passwords updated
-        cursor.execute("UPDATE users SET password_hash = ? WHERE username = 'operator';", (op_pass_hash,))
-        cursor.execute("UPDATE users SET password_hash = ? WHERE username = 'engineer';", (eng_pass_hash,))
+        cursor.execute("UPDATE users SET password_hash = ? WHERE username = ?;", (op_pass_hash, op_user))
+
+    cursor.execute("SELECT * FROM users WHERE username = ?;", (eng_user,))
+    if not cursor.fetchone():
+        cursor.execute("INSERT INTO users (username, password_hash, role, full_name) VALUES (?, ?, ?, ?);",
+                       (eng_user, eng_pass_hash, "engineer", "Demo Prototype Engineer"))
+    else:
+        cursor.execute("UPDATE users SET password_hash = ? WHERE username = ?;", (eng_pass_hash, eng_user))
 
     cursor.execute("UPDATE users SET full_name = 'Demo Prototype Operator' WHERE full_name LIKE '%DRDO%' OR full_name LIKE '%Propulsion Engineer%';")
     conn.commit()
     conn.close()
+
+    # Enforce retention on startup
+    enforce_mission_retention(max_retained=5)
+
+def enforce_mission_retention(max_retained: int = 5, conn=None):
+    """
+    Retains at most `max_retained` missions (active recording + 4 most recent completed missions).
+    Removes older completed missions and their associated snapshots/events inside an atomic SQLite transaction.
+    """
+    should_close = False
+    if conn is None:
+        conn = get_db_connection()
+        should_close = True
+
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT mission_id FROM missions ORDER BY start_time DESC;")
+        rows = cursor.fetchall()
+        mission_ids = [r["mission_id"] for r in rows]
+
+        if len(mission_ids) > max_retained:
+            to_delete = mission_ids[max_retained:]
+            placeholders = ",".join(["?"] * len(to_delete))
+
+            cursor.execute("BEGIN TRANSACTION;")
+            cursor.execute(f"DELETE FROM mission_snapshots WHERE mission_id IN ({placeholders});", to_delete)
+            cursor.execute(f"DELETE FROM mission_events WHERE mission_id IN ({placeholders});", to_delete)
+            cursor.execute(f"DELETE FROM missions WHERE mission_id IN ({placeholders});", to_delete)
+            conn.commit()
+            print(f"[MISSION RETENTION] Purged {len(to_delete)} older mission recordings. Retained top {max_retained} missions.")
+    except Exception as e:
+        if conn:
+            try: conn.rollback()
+            except Exception: pass
+        print(f"[MISSION RETENTION ERROR] {e}")
+    finally:
+        if should_close and conn:
+            conn.close()
 
 def log_telemetry_data(data):
     conn = get_db_connection()
@@ -263,6 +306,7 @@ def save_mission_record(mission_dict):
     ))
     conn.commit()
     conn.close()
+    enforce_mission_retention(max_retained=5)
 
 def save_mission_snapshot_record(mission_id, seq, ts, snapshot_dict):
     conn = get_db_connection()
@@ -334,3 +378,4 @@ def db_get_mission(mission_id):
 if __name__ == "__main__":
     init_db()
     print("Database initialized successfully.")
+

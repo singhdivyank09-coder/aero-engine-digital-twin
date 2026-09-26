@@ -53,10 +53,86 @@ app.add_middleware(
 FRONTEND_DIR = os.path.join(os.path.dirname(__file__), "..", "frontend")
 app.mount("/static", StaticFiles(directory=FRONTEND_DIR), name="static")
 
+import urllib.request
+import urllib.parse
+from collections import defaultdict
+
+# Cloudflare Turnstile CAPTCHA & Rate Limiting Configuration
+TURNSTILE_SITE_KEY = os.getenv("TURNSTILE_SITE_KEY", "")
+TURNSTILE_SECRET_KEY = os.getenv("TURNSTILE_SECRET_KEY", "")
+used_captcha_tokens: Dict[str, float] = {}
+rate_limit_tracker: Dict[str, List[float]] = defaultdict(list)
+MAX_DEMO_WS_CONNECTIONS = int(os.getenv("MAX_DEMO_WS_CONNECTIONS", "20"))
+
+def check_rate_limit(client_ip: str = "default", limit: int = 15, window_sec: int = 60):
+    now = time.time()
+    timestamps = rate_limit_tracker[client_ip]
+    rate_limit_tracker[client_ip] = [t for t in timestamps if now - t < window_sec]
+    if len(rate_limit_tracker[client_ip]) >= limit:
+        raise HTTPException(status_code=429, detail="Too many login attempts. Please wait a minute before retrying.")
+    rate_limit_tracker[client_ip].append(now)
+
+def verify_turnstile_captcha(token: str, client_ip: str = "") -> bool:
+    if not token or not isinstance(token, str):
+        return False
+
+    now = time.time()
+    # Reject replayed tokens
+    if token in used_captcha_tokens:
+        if now - used_captcha_tokens[token] < 300:
+            return False
+
+    # Clean expired cached tokens
+    expired = [t for t, ts in used_captcha_tokens.items() if now - ts >= 300]
+    for t in expired:
+        del used_captcha_tokens[t]
+
+    env = os.getenv("ENVIRONMENT", "").lower()
+    is_render = os.getenv("RENDER", "").lower() == "true"
+    is_prod = env in ["production", "prod"] or is_render
+
+    if is_prod and not TURNSTILE_SECRET_KEY:
+        print("[CAPTCHA ERROR] Production mode requires TURNSTILE_SECRET_KEY!")
+        return False
+
+    # Safe test bypass ONLY when not in production and TURNSTILE_SECRET_KEY is 'test'/'dummy' or unconfigured in dev
+    if not is_prod and (not TURNSTILE_SECRET_KEY or TURNSTILE_SECRET_KEY in ["test", "dummy"]):
+        if token.startswith("test_") or token in ["valid_captcha_token", "test_captcha_token"]:
+            used_captcha_tokens[token] = now
+            return True
+
+    if not TURNSTILE_SECRET_KEY:
+        return False
+
+    try:
+        url = "https://challenges.cloudflare.com/turnstile/v0/siteverify"
+        params = {"secret": TURNSTILE_SECRET_KEY, "response": token}
+        if client_ip:
+            params["remoteip"] = client_ip
+
+        data = urllib.parse.urlencode(params).encode("utf-8")
+        req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/x-www-form-urlencoded"})
+        with urllib.request.urlopen(req, timeout=8) as resp:
+            result = json.loads(resp.read().decode("utf-8"))
+
+        success = result.get("success", False)
+        if success:
+            used_captcha_tokens[token] = now
+            return True
+        else:
+            print(f"[CAPTCHA FAILED] Result: {result}")
+            return False
+    except Exception as e:
+        print(f"[CAPTCHA EXCEPTION] {e}")
+        return False
+
 # Pydantic Schemas
 class LoginRequest(BaseModel):
     username: str
     password: str
+
+class DemoLoginRequest(BaseModel):
+    captcha_token: str
 
 class MissionProfileRequest(BaseModel):
     profile: str
@@ -83,22 +159,49 @@ def get_root():
 def get_health():
     return {"status": "ok", "system": "Aero Engine Digital Twin Orchestrator v2.0"}
 
+@app.get("/api/auth/captcha-config")
+def get_captcha_config():
+    return {
+        "site_key": TURNSTILE_SITE_KEY,
+        "captcha_required": True
+    }
+
 @app.post("/api/auth/login")
 def login(req: LoginRequest):
+    check_rate_limit("login_attempt", limit=20, window_sec=60)
     user = authenticate_user(req.username, req.password)
     if not user:
         log_audit_event(req.username or "unknown", "failed login", f"Failed login attempt for username '{req.username}'", role="guest")
         raise HTTPException(status_code=401, detail="Invalid username or password")
-    
+
     token = create_access_token({"sub": user["username"], "role": user["role"], "full_name": user["full_name"]})
     log_audit_event(user["username"], "login", f"User logged in with role {user['role']}", role=user["role"])
-    
+
     return {
         "access_token": token,
         "token_type": "bearer",
         "username": user["username"],
         "role": user["role"],
         "full_name": user["full_name"]
+    }
+
+@app.post("/api/auth/demo-login")
+def demo_login(req: DemoLoginRequest):
+    check_rate_limit("demo_attempt", limit=10, window_sec=60)
+    if not verify_turnstile_captcha(req.captcha_token):
+        raise HTTPException(status_code=400, detail="CAPTCHA verification failed. Please complete the security check.")
+
+    demo_id = f"demo_visitor_{int(time.time() * 1000) % 100000}"
+    token = create_access_token(
+        data={"sub": demo_id, "role": "demo", "full_name": "Public Demo Visitor"},
+        expires_minutes=60
+    )
+    return {
+        "access_token": token,
+        "token_type": "bearer",
+        "username": demo_id,
+        "role": "demo",
+        "full_name": "Public Demo Visitor"
     }
 
 @app.get("/api/debug/session")
@@ -108,8 +211,9 @@ def get_debug_session(authorization: Optional[str] = Header(None)):
         raise HTTPException(status_code=401, detail="Missing authorization token")
     token = authorization.split(" ")[1]
     payload = verify_token(token)
-    if not payload:
-        raise HTTPException(status_code=401, detail="Invalid or expired token")
+    if not payload or payload.get("role") != "engineer":
+        raise HTTPException(status_code=403, detail="Engineer permission required to view diagnostic debug session")
+
 
     global latest_canonical_snapshot
     if latest_canonical_snapshot is None:
@@ -363,8 +467,8 @@ def get_audit_logs(authorization: Optional[str] = Header(None)):
         raise HTTPException(status_code=401, detail="Missing authorization token")
     token = authorization.split(" ")[1]
     payload = verify_token(token)
-    if not payload:
-        raise HTTPException(status_code=401, detail="Invalid or expired token")
+    if not payload or payload.get("role") != "engineer":
+        raise HTTPException(status_code=403, detail="Engineer permission required to access security audit logs")
 
     logs = get_recent_audit_logs(limit=50)
     return {"audit_logs": logs}
@@ -462,14 +566,23 @@ def get_system_model_registry():
 class ConnectionManager:
     def __init__(self):
         self.active_connections: List[WebSocket] = []
+        self.demo_connections: List[WebSocket] = []
 
-    async def connect(self, websocket: WebSocket):
+    async def connect(self, websocket: WebSocket, is_demo: bool = False) -> bool:
+        if is_demo and len(self.demo_connections) >= MAX_DEMO_WS_CONNECTIONS:
+            await websocket.close(code=1008, reason="Maximum concurrent Demo connections reached. Please try again later.")
+            return False
         await websocket.accept()
         self.active_connections.append(websocket)
+        if is_demo:
+            self.demo_connections.append(websocket)
+        return True
 
     def disconnect(self, websocket: WebSocket):
         if websocket in self.active_connections:
             self.active_connections.remove(websocket)
+        if websocket in self.demo_connections:
+            self.demo_connections.remove(websocket)
 
     async def broadcast(self, message: str):
         for connection in list(self.active_connections):
@@ -552,7 +665,11 @@ async def websocket_telemetry_endpoint(websocket: WebSocket, token: Optional[str
         await websocket.close(code=1008, reason="Invalid or expired token")
         return
 
-    await manager.connect(websocket)
+    is_demo = payload.get("role") == "demo"
+    connected = await manager.connect(websocket, is_demo=is_demo)
+    if not connected:
+        return
+
     global latest_canonical_snapshot
     if latest_canonical_snapshot is not None:
         msg_str = json.dumps(latest_canonical_snapshot, default=safe_json_default)
@@ -575,4 +692,5 @@ if __name__ == "__main__":
     import uvicorn
     print("[TWIN_SYNC] Starting Uvicorn with single worker configuration (workers=1)...")
     uvicorn.run("backend.main:app", host="0.0.0.0", port=8000, workers=1)
+
 

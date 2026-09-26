@@ -11,6 +11,7 @@
     <!-- FontAwesome icons & Chart.js -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
     <link rel="stylesheet" href="/static/styles.css?v=5">
 </head>
 <body class="light-aerospace-theme">
@@ -41,6 +42,19 @@
                     <i class="fa-solid fa-right-to-bracket"></i> AUTHENTICATE & LAUNCH GCS
                 </button>
             </form>
+
+            <div style="margin-top: 1rem; border-top: 1px dashed var(--border-light); padding-top: 1rem; text-align: center;">
+                <div id="turnstile-container" style="margin-bottom: 0.5rem; display: flex; justify-content: center;"></div>
+                <button type="button" id="btn-demo-login" class="btn btn-secondary full-width">
+                    <i class="fa-solid fa-eye text-blue"></i> EXPLORE PUBLIC DEMO (READ-ONLY)
+                </button>
+            </div>
+
+            <!-- MANDATORY TEMPORARY DATA NOTICE -->
+            <div class="data-loss-notice" style="margin-top: 1rem; padding: 0.6rem 0.8rem; background: #fffbe6; border: 1px solid #ffe58f; border-radius: 6px; font-size: 0.75rem; color: #8c6b00; text-align: left; line-height: 1.35;">
+                <i class="fa-solid fa-triangle-exclamation" style="color: #d4b106;"></i> <strong>Temporary Demonstration Data:</strong> This application retains up to five recent missions during the current server session. Recordings may be lost when the free hosting service becomes inactive, restarts or redeploys. Download any reports you wish to keep.
+            </div>
+
             <div id="login-server-status" class="margin-top" style="font-size: 0.78rem; color: var(--primary-blue);">
                 <i class="fa-solid fa-circle-notch fa-spin"></i> Connecting to backend server (127.0.0.1:8000)...
             </div>
@@ -92,6 +106,7 @@
         <!-- MANDATORY DISCLAIMER BANNER -->
         <div class="disclaimer-banner" style="background:#f1f5f9; border-bottom:1px solid var(--border-light); padding:0.4rem 2rem; font-size:0.75rem; color:var(--text-muted); display:flex; justify-content:space-between; align-items:center;">
             <span><i class="fa-solid fa-circle-info text-blue"></i> <strong>Disclaimer:</strong> Software demonstrator using public/analogous datasets. Not connected to an operational UAV.</span>
+            <span style="background:#e0f2fe; color:#0369a1; border:1px solid #bae6fd; padding:0.2rem 0.6rem; border-radius:4px; font-weight:700;"><i class="fa-solid fa-users"></i> SHARED DEMONSTRATION SESSION</span>
             <span><i class="fa-solid fa-code-commit"></i> Demo Prototype Single Source of Truth Digital Twin Core</span>
         </div>
 
@@ -955,6 +970,11 @@
 
             <!-- 4. MISSION REPLAY & REPORTS VIEW -->
             <div id="view-replay" class="tab-content">
+                <!-- MANDATORY TEMPORARY DATA NOTICE -->
+                <div class="data-loss-notice" style="margin-bottom: 1rem; padding: 0.6rem 0.8rem; background: #fffbe6; border: 1px solid #ffe58f; border-radius: 6px; font-size: 0.78rem; color: #8c6b00; line-height: 1.35;">
+                    <i class="fa-solid fa-triangle-exclamation" style="color: #d4b106;"></i> <strong>Temporary Demonstration Data:</strong> This application retains up to five recent missions during the current server session. Recordings may be lost when the free hosting service becomes inactive, restarts or redeploys. Download any reports you wish to keep.
+                </div>
+
                 <!-- HISTORICAL REPLAY MODE DEMARCATION BANNER -->
                 <div style="background: linear-gradient(90deg, #0f172a, #1e293b); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.4); border-radius: 8px; padding: 0.65rem 1rem; margin-bottom: 1.2rem; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 4px 12px rgba(0,0,0,0.15);">
                     <div style="display: flex; align-items: center; gap: 0.75rem;">

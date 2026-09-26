@@ -72,6 +72,8 @@ def sanitize_snapshot_for_persistence(snap: Dict[str, Any]) -> Dict[str, Any]:
     return {k: v for k, v in compact.items() if v is not None and v != {} and v != []}
 
 
+MAX_MISSION_DURATION_SECONDS = int(os.getenv("MAX_MISSION_DURATION_SECONDS", "3600"))
+
 class MissionRecorder:
     _mission_counter = 1
 
@@ -184,9 +186,19 @@ class MissionRecorder:
         if not self.is_recording or not snapshot:
             return
 
+        # Check for mission duration rollover (60 minutes)
+        elapsed_seconds = time.time() - self.start_ts
+        if elapsed_seconds >= MAX_MISSION_DURATION_SECONDS:
+            sc_curr = snapshot.get("scenario", "CRUISE")
+            sc_name = sc_curr.get("id") if isinstance(sc_curr, dict) else str(sc_curr)
+            print(f"[MISSION ROLLOVER] Mission {self.current_mission_id} elapsed duration {elapsed_seconds:.1f}s >= {MAX_MISSION_DURATION_SECONDS}s. Finalizing and starting new mission.")
+            self.start_new_mission(scenario=sc_name, telemetry_source=self.telemetry_source, analytics_dataset=self.analytics_dataset)
+            return
+
         seq = snapshot.get("sequence_number", 0)
         ts = snapshot.get("timestamp", 0.0)
         state = snapshot.get("system_state") or snapshot.get("global_state") or "NORMAL"
+
         
         sc_obj = snapshot.get("scenario")
         sc_id = sc_obj.get("id") if isinstance(sc_obj, dict) else str(sc_obj or "CRUISE")
