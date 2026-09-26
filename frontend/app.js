@@ -74,6 +74,7 @@ async function initCaptchaAndDemoLogin() {
         try {
             turnstile.render("#cf-turnstile-widget", {
                 sitekey: siteKey,
+                action: "demo_login",
                 theme: "light",
                 callback: function(token) {
                     window.lastTurnstileToken = token;

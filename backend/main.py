@@ -15,7 +15,7 @@ from typing import Dict, Any, List, Optional
 # Ensure project root is in sys.path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends, HTTPException, status, Header
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends, HTTPException, status, Header, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import JSONResponse
@@ -38,7 +38,15 @@ app = FastAPI(
 )
 
 # Enable CORS with configurable allowed origins
-allowed_origins_env = os.getenv("ALLOWED_ORIGINS", "*")
+allowed_origins_env = os.getenv("ALLOWED_ORIGINS", "https://aero-engine-digital-twin.onrender.com")
+env_mode = os.getenv("ENVIRONMENT", "").lower()
+is_render_mode = os.getenv("RENDER", "").lower() == "true"
+is_prod_mode = env_mode in ["production", "prod"] or is_render_mode
+
+if is_prod_mode and (not allowed_origins_env or allowed_origins_env == "*"):
+    render_host = os.getenv("RENDER_EXTERNAL_HOSTNAME", "aero-engine-digital-twin.onrender.com")
+    allowed_origins_env = f"https://{render_host}"
+
 origins = [o.strip() for o in allowed_origins_env.split(",")] if allowed_origins_env != "*" else ["*"]
 
 app.add_middleware(
@@ -64,15 +72,31 @@ used_captcha_tokens: Dict[str, float] = {}
 rate_limit_tracker: Dict[str, List[float]] = defaultdict(list)
 MAX_DEMO_WS_CONNECTIONS = int(os.getenv("MAX_DEMO_WS_CONNECTIONS", "20"))
 
-def check_rate_limit(client_ip: str = "default", limit: int = 15, window_sec: int = 60):
-    now = time.time()
-    timestamps = rate_limit_tracker[client_ip]
-    rate_limit_tracker[client_ip] = [t for t in timestamps if now - t < window_sec]
-    if len(rate_limit_tracker[client_ip]) >= limit:
-        raise HTTPException(status_code=429, detail="Too many login attempts. Please wait a minute before retrying.")
-    rate_limit_tracker[client_ip].append(now)
+def get_client_ip(request: Request) -> str:
+    """Extracts visitor client IP address, handling proxy headers safely."""
+    forwarded = request.headers.get("x-forwarded-for")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    if request.client and request.client.host:
+        return request.client.host
+    return "127.0.0.1"
 
-def verify_turnstile_captcha(token: str, client_ip: str = "") -> bool:
+def check_rate_limit(key: str, limit: int = 15, window_sec: int = 60):
+    """Enforces rate-limits keyed by visitor client IP address."""
+    now = time.time()
+    # Cleanup stale entries
+    stale_keys = [k for k, timestamps in rate_limit_tracker.items() if not timestamps or (now - max(timestamps) > window_sec * 2)]
+    for sk in stale_keys:
+        del rate_limit_tracker[sk]
+
+    timestamps = [t for t in rate_limit_tracker[key] if now - t < window_sec]
+    rate_limit_tracker[key] = timestamps
+    if len(timestamps) >= limit:
+        raise HTTPException(status_code=429, detail="Too many login attempts from your IP. Please wait a minute before retrying.")
+    rate_limit_tracker[key].append(now)
+
+def verify_turnstile_captcha(token: str, client_ip: str = "", request_host: str = "", expected_action: str = "demo_login") -> bool:
+    """Verifies Turnstile CAPTCHA token, checking success, action, and target hostname."""
     if not token or not isinstance(token, str):
         return False
 
@@ -91,22 +115,24 @@ def verify_turnstile_captcha(token: str, client_ip: str = "") -> bool:
     is_render = os.getenv("RENDER", "").lower() == "true"
     is_prod = env in ["production", "prod"] or is_render
 
-    if is_prod and not TURNSTILE_SECRET_KEY:
+    secret_key = os.getenv("TURNSTILE_SECRET_KEY", TURNSTILE_SECRET_KEY)
+
+    if is_prod and not secret_key:
         print("[CAPTCHA ERROR] Production mode requires TURNSTILE_SECRET_KEY!")
         return False
 
     # Safe test bypass ONLY when not in production and TURNSTILE_SECRET_KEY is 'test'/'dummy' or unconfigured in dev
-    if not is_prod and (not TURNSTILE_SECRET_KEY or TURNSTILE_SECRET_KEY in ["test", "dummy"]):
+    if not is_prod and (not secret_key or secret_key in ["test", "dummy"]):
         if token.startswith("test_") or token in ["valid_captcha_token", "test_captcha_token"]:
             used_captcha_tokens[token] = now
             return True
 
-    if not TURNSTILE_SECRET_KEY:
+    if not secret_key:
         return False
 
     try:
         url = "https://challenges.cloudflare.com/turnstile/v0/siteverify"
-        params = {"secret": TURNSTILE_SECRET_KEY, "response": token}
+        params = {"secret": secret_key, "response": token}
         if client_ip:
             params["remoteip"] = client_ip
 
@@ -116,12 +142,42 @@ def verify_turnstile_captcha(token: str, client_ip: str = "") -> bool:
             result = json.loads(resp.read().decode("utf-8"))
 
         success = result.get("success", False)
-        if success:
-            used_captcha_tokens[token] = now
-            return True
-        else:
+        if not success:
             print(f"[CAPTCHA FAILED] Result: {result}")
             return False
+
+        # 1. Action verification
+        resp_action = result.get("action", "")
+        if expected_action and resp_action and resp_action != expected_action:
+            print(f"[CAPTCHA ACTION MISMATCH] Expected '{expected_action}', got '{resp_action}'")
+            return False
+
+        # 2. Hostname verification
+        resp_hostname = result.get("hostname", "")
+        if resp_hostname:
+            allowed_hosts = set()
+            render_host = os.getenv("RENDER_EXTERNAL_HOSTNAME", "")
+            if render_host:
+                allowed_hosts.add(render_host.lower())
+
+            allowed_env = os.getenv("ALLOWED_ORIGINS", "")
+            for o in allowed_env.split(","):
+                o_clean = o.strip().replace("https://", "").replace("http://", "").split("/")[0].split(":")[0]
+                if o_clean and o_clean != "*":
+                    allowed_hosts.add(o_clean.lower())
+
+            if request_host:
+                allowed_hosts.add(request_host.lower())
+
+            if not is_prod:
+                allowed_hosts.update(["127.0.0.1", "localhost", "test", "testserver"])
+
+            if allowed_hosts and resp_hostname.lower() not in allowed_hosts:
+                print(f"[CAPTCHA HOSTNAME MISMATCH] '{resp_hostname}' not in allowed hosts {allowed_hosts}")
+                return False
+
+        used_captcha_tokens[token] = now
+        return True
     except Exception as e:
         print(f"[CAPTCHA EXCEPTION] {e}")
         return False
@@ -167,11 +223,12 @@ def get_captcha_config():
     }
 
 @app.post("/api/auth/login")
-def login(req: LoginRequest):
-    check_rate_limit("login_attempt", limit=20, window_sec=60)
+def login(req: LoginRequest, request: Request):
+    client_ip = get_client_ip(request)
+    check_rate_limit(f"login:{client_ip}", limit=15, window_sec=60)
     user = authenticate_user(req.username, req.password)
     if not user:
-        log_audit_event(req.username or "unknown", "failed login", f"Failed login attempt for username '{req.username}'", role="guest")
+        log_audit_event(req.username or "unknown", "failed login", f"Failed login attempt for username '{req.username}' from IP {client_ip}", role="guest")
         raise HTTPException(status_code=401, detail="Invalid username or password")
 
     token = create_access_token({"sub": user["username"], "role": user["role"], "full_name": user["full_name"]})
@@ -186,9 +243,11 @@ def login(req: LoginRequest):
     }
 
 @app.post("/api/auth/demo-login")
-def demo_login(req: DemoLoginRequest):
-    check_rate_limit("demo_attempt", limit=10, window_sec=60)
-    if not verify_turnstile_captcha(req.captcha_token):
+def demo_login(req: DemoLoginRequest, request: Request):
+    client_ip = get_client_ip(request)
+    check_rate_limit(f"demo:{client_ip}", limit=10, window_sec=60)
+    request_host = request.headers.get("host", "").split(":")[0]
+    if not verify_turnstile_captcha(req.captcha_token, client_ip=client_ip, request_host=request_host, expected_action="demo_login"):
         raise HTTPException(status_code=400, detail="CAPTCHA verification failed. Please complete the security check.")
 
     demo_id = f"demo_visitor_{int(time.time() * 1000) % 100000}"

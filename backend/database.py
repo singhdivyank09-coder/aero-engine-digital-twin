@@ -153,11 +153,24 @@ def init_db():
     );
     """)
 
-    # Seed or Update Default Users
+    # Seed or Update Users
+    env = os.getenv("ENVIRONMENT", "").lower()
+    is_render = os.getenv("RENDER", "").lower() == "true"
+    is_prod = env in ["production", "prod"] or is_render
+
     op_user = os.getenv("DEMO_OPERATOR_USERNAME", "operator")
-    op_password = os.getenv("DEMO_OPERATOR_PASSWORD", "operator123")
+    op_password = os.getenv("DEMO_OPERATOR_PASSWORD")
     eng_user = os.getenv("DEMO_ENGINEER_USERNAME", "engineer")
-    eng_password = os.getenv("DEMO_ENGINEER_PASSWORD", "engineer123")
+    eng_password = os.getenv("DEMO_ENGINEER_PASSWORD")
+
+    if is_prod:
+        if not op_password or op_password == "operator123":
+            raise RuntimeError("CRITICAL SECURITY FAILURE: DEMO_OPERATOR_PASSWORD environment variable must be explicitly configured in production!")
+        if not eng_password or eng_password == "engineer123":
+            raise RuntimeError("CRITICAL SECURITY FAILURE: DEMO_ENGINEER_PASSWORD environment variable must be explicitly configured in production!")
+
+    op_password = op_password or "operator123"
+    eng_password = eng_password or "engineer123"
 
     op_pass_hash = get_password_hash(op_password, op_user)
     eng_pass_hash = get_password_hash(eng_password, eng_user)

@@ -22,16 +22,41 @@ def get_jwt_secret_key() -> str:
         secret = "DEV_ONLY_LOCAL_JWT_SECRET_KEY_REPLACE_IN_PRODUCTION_2026"
     return secret
 
-def get_password_hash(password: str, username: str = "") -> str:
-    user_salt = f"{username}:{PASSWORD_SALT}"
-    key = hashlib.pbkdf2_hmac('sha256', password.encode('utf-8'), user_salt.encode('utf-8'), 100000)
-    return key.hex()
+import secrets
+
+def get_password_hash(password: str, username: str = "", salt: Optional[str] = None) -> str:
+    """
+    Generates a cryptographically secure PBKDF2-HMAC-SHA256 password hash using a 16-byte random per-user salt.
+    Returns string formatted as: {salt}${pbkdf2_hex_hash}
+    """
+    if not salt:
+        salt = secrets.token_hex(16)
+    key = hashlib.pbkdf2_hmac('sha256', password.encode('utf-8'), salt.encode('utf-8'), 100000)
+    return f"{salt}${key.hex()}"
 
 def verify_password(plain_password: str, hashed_password: str, username: str = "") -> bool:
-    # Support both per-user salt and fallback single salt for legacy hashes
-    if get_password_hash(plain_password, username) == hashed_password:
+    """
+    Verifies a plain-text password against a stored hash string.
+    Supports random per-user salt format (salt$hash), legacy username-based salt, and single-salt fallbacks.
+    """
+    if not hashed_password or not plain_password:
+        return False
+
+    if "$" in hashed_password:
+        try:
+            salt, stored_key = hashed_password.split("$", 1)
+            calculated_hash = get_password_hash(plain_password, username, salt=salt)
+            return calculated_hash == hashed_password
+        except Exception:
+            return False
+
+    # Legacy fallback 1: username + PASSWORD_SALT
+    legacy_user_salt = f"{username}:{PASSWORD_SALT}"
+    legacy_key = hashlib.pbkdf2_hmac('sha256', plain_password.encode('utf-8'), legacy_user_salt.encode('utf-8'), 100000).hex()
+    if legacy_key == hashed_password:
         return True
-    # Fallback to single salt check
+
+    # Legacy fallback 2: single PASSWORD_SALT
     fallback_key = hashlib.pbkdf2_hmac('sha256', plain_password.encode('utf-8'), PASSWORD_SALT.encode('utf-8'), 100000).hex()
     return fallback_key == hashed_password
 

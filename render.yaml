@@ -23,6 +23,6 @@ services:
       - key: TURNSTILE_SECRET_KEY
         sync: false
       - key: ALLOWED_ORIGINS
-        value: "*"
+        value: "https://aero-engine-digital-twin.onrender.com"
       - key: DB_PATH
         value: /app/data/telemetry_db.sqlite
