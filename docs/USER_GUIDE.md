@@ -1,53 +1,77 @@
 # User Guide & Demo Walkthrough — Aero Engine Digital Twin
 
-## 1. Overview
-The Ground Control Station (GCS) UI provides real-time propulsion health monitoring, predictive degradation analytics, 2D component schematics, and simulated fault injection controls for 4-cylinder aero-piston UAV engines.
+**Team Hackonauts09 · Simulated engine health-monitoring demonstration**
 
----
+[Open live demo](https://aero-engine-digital-twin.onrender.com) · [README](../README.md) · [Installation and account setup](INSTALLATION.md)
 
-## 2. Interface Layout
+> This software is not connected to a physical engine or operational UAV. All fault injection affects only simulated telemetry; GCS/DFCS advisories are demonstrative and not certified flight guidance.
 
-### 2.1 Top Navigation & Header
-- **System State Badge**: Displays current global state (`NORMAL`, `WATCH`, `CAUTION`, `WARNING`, `CRITICAL`).
-- **Health Index Gauge**: Displays overall propulsion health percentage (0.0% – 100.0%).
-- **Anomaly Score**: Real-time multi-sensor autoencoder anomaly score.
-- **Prototype RUL Estimate**: Experimental prognostics estimate in sequence cycles based on NASA C-MAPSS model curves.
-- **User Profile**: Displays authenticated role (`ENGINEER` or `OPERATOR`) and user display label (`Demo Prototype Operator`).
+## 1. Choose an access role
 
-### 2.2 Navigation Tabs
-1. **Operator Dashboard**: Primary telemetry gauges, RPM, CHT/EGT temperature spreads, oil pressure, battery voltage, and 10Hz live trend charts.
-2. **2D Digital Twin Schematic**: Interactive 2D component diagram showing individual cylinder heads (CHT 1–4), oil pump, exhaust manifold, and electrical generator with per-component thermal degradation overlays.
-3. **Predictive Analytics & Forecaster**: Real-time PyTorch GRU 60-second forward projection curves (+10s, +30s, +60s) for CHT1, Oil Pressure, and Vibration RMS.
-4. **Fault Injection & Analytics**: Control panel to trigger simulated physical fault scenarios.
-5. **GCS / DFCS Demonstrator**: Advisory Digital Flight Control System interface displaying pilot advisories, emergency checklist recommendations, and manual control overrides.
-6. **Mission Replay & Reports**: Historical mission telemetry viewer and report exporter.
+| Role | Sign-in | Available experience |
+| --- | --- | --- |
+| **Public Demo** | Complete the Cloudflare Turnstile challenge; no password required. | Read-only shared dashboard, 2D twin, selected analytics, available mission replay and an independent Public Fault Playground. |
+| **Operator** | Use the private Operator username and password provided by the project administrator. | Shared live monitoring, analytics, GCS/DFCS advisory views and replay. |
+| **Engineer** | Use the private Engineer username and password provided by the project administrator. | Monitoring plus authorized live simulated fault controls, scenario/dataset changes, mission controls and audit logs. |
 
----
+**No production passwords are published in this repository.** Only Engineers can change the **shared live simulation**. Other visitors can experiment with faults in their **own browser** using the Public Fault Playground.
 
-## 3. Running a Guided Demonstration
+## 2. Understand the dashboard
 
-### Step 1: Nominal Baseline Operation
-1. Log in as `engineer` / `engineer123`.
-2. Observe that the **System State** is `NORMAL` and **Health Index** is `> 96%`.
-3. Note that the **Predictive Early Warning** panel displays `999 s (Nominal)`.
+The header shows the current health state, health index, anomaly score, experimental RUL and the **measured scheduler rate**. The telemetry pipeline targets 10 Hz, but a host under load may show `DEGRADED` with a lower measured rate.
 
-### Step 2: Injecting Thermal Degradation (Cylinder 1 CHT Spike)
-1. Navigate to the **Fault Injection & Analytics** tab.
-2. Select **Cylinder 1 Thermal Degradation** (`CYLINDER_THERMAL`).
-3. Set **Profile** to `GRADUAL` and **Intensity** to `1.8`.
-4. Click **INJECT FAULT**.
+- **Operator Dashboard:** telemetry, trends, predictive early warnings and the shared simulated-fault status.
+- **2D Digital Twin Schematic:** component-level visualization of the current simulated state.
+- **Fault Injection & Analytics:** live control buttons for Engineers and an Engineer-only permission notice for other roles; viewers can inspect available diagnostics.
+- **Simulated Fault Playground:** separate browser-side synthetic scenario playback that does not change the shared engine.
+- **Mission Replay & Reports:** recent temporary recordings and report export.
+- **AI Models & Dataset Mapping:** model descriptions and the distinction between simulated live data and analogous prognostics datasets.
+- **GCS & DFCS Demonstrator:** advisory-only software checklists and status indicators.
+- **System Metrics & Assumptions:** measured application and data-integrity metrics.
+- **Security Audit Logs:** restricted to authorized Engineer accounts.
 
-### Step 3: Observing Predictive Early Warning & State Machine Escalation
-1. Observe the **PyTorch GRU Forecaster**: the +30s and +60s curves for CHT1 start angling upwards before current CHT1 breaches the 145.0°C limit.
-2. The System State transitions through progressive hysteresis: `NORMAL` $\rightarrow$ `WATCH` $\rightarrow$ `CAUTION` $\rightarrow$ `WARNING`.
-3. The **Predictive Time-to-Risk** panel decreases dynamically (e.g. `45.0 s`, `20.0 s`).
+The **SHARED DEMONSTRATION SESSION** label means an Engineer's live fault can appear for all connected viewers. It does not make a Demo visitor an Engineer.
 
-### Step 4: Physical Limit Breach & Emergency Advisory
-1. As CHT1 reaches **145.0°C**, the System State escalates to `CRITICAL`.
-2. The **Predictive Early Warning** badge updates immediately to `0 s — LIMIT EXCEEDED`.
-3. The **GCS/DFCS Demonstrator** highlights Cylinder 1 in red and generates advisory recommendations: `REDUCE THROTTLE TO 65% / INITIATE RETURN TO BASE (RTB)`.
+## 3. Public visitor: try a fault without Engineer access
 
-### Step 5: Clearing Fault & Stepwise Recovery
-1. Click **CLEAR ALL FAULTS**.
-2. Observe telemetry returning toward baseline nominal values.
-3. Note that the state machine does not instantly jump to `NORMAL`; it de-escalates step-by-step (`CRITICAL` $\rightarrow$ `WARNING` $\rightarrow$ `CAUTION` $\rightarrow$ `WATCH` $\rightarrow$ `NORMAL`) over consecutive nominal frames via hysteresis ring buffers.
+1. Open the live website, complete Turnstile and choose **Explore Public Demo**.
+2. Select **Simulated Fault Playground**.
+3. Choose one of six synthetic scenarios: thermal degradation, oil-pressure loss, increased vibration, sensor drift, intermittent combustion or injector disturbance.
+4. Use **Play**, **Pause**, **Reset** or the timeline slider to explore the illustrative recorded-style trace.
+5. Read the **RECORDED DEMONSTRATION RESULTS** label. Trace scores are synthetic illustrations, not freshly executed model inference. Unavailable metrics should be marked accordingly.
+
+Playground actions stay in your browser. They never inject a fault into TwinSession or affect other viewers.
+
+## 4. Engineer: guided shared-session demonstration
+
+Use only your **configured private Engineer credentials**. If other people are watching, tell them that the following actions change the shared simulation.
+
+### Step 1 — Establish a nominal starting point
+
+Clear any previously injected simulated fault if one is active. Allow the simulator and prediction windows time to settle; do not assume the session is nominal immediately after another visitor's demonstration. Check the measured scheduler rate and current system state.
+
+### Step 2 — Inject a simulated fault
+
+Open **Fault Injection & Analytics**, select a compatible scenario and component, choose a profile such as `GRADUAL` and start the simulated injection. For example, **Cylinder 1 Thermal Degradation** (`CYLINDER_THERMAL`) can illustrate rising CHT and subsequent changes in diagnostic evidence.
+
+Only authorized Engineers can start, pause, resume or clear a **live** injection. Operator and Demo requests to restricted backend endpoints receive HTTP 403.
+
+### Step 3 — Observe diagnostics and recovery
+
+Watch telemetry, the physics residual, anomaly and classifier outputs, GRU projections, time-to-risk and the five-state health indicator. The precise timing and state transitions depend on the selected profile, model warm-up and achieved processing rate; they are not guaranteed to follow a fixed countdown.
+
+Use **Clear All Faults** when finished, then observe the simulator returning toward its baseline and the health-state machine recovering step by step where the evidence allows.
+
+### Step 4 — Inspect mission replay
+
+Open **Mission Replay & Reports** to inspect recent snapshots and events. The recorder retains at most five missions and uses a one-hour default rollover. Render Free storage is temporary: export reports you want to keep before inactivity, restart or redeployment resets the server.
+
+## 5. Operator: monitor without live control
+
+Log in with the Operator credentials configured by the administrator. Observe the shared dashboard, current simulated faults, diagnostic indicators and advisory views. Use mission replay to examine available prior segments. The Public Fault Playground offers an independent way to explore scenarios without requiring Engineer permissions.
+
+## 6. Logout and connection status
+
+Use the power button in the top-right header to log out. If the Free host has been inactive, the first request may take longer while the service starts. A connected backend does not imply that a login attempt succeeded; credential errors and CAPTCHA status are separate.
+
+This is **research and demonstration software**. RUL cycles come from an experimental NASA C-MAPSS turbofan analogue, not a certified aero-piston maintenance estimate. See [Datasets, Provenance & Limitations](DATASETS_AND_LIMITATIONS.md).
