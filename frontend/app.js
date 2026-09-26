@@ -46,7 +46,7 @@ async function checkServerConnection() {
     try {
         const res = await fetch(`${API_BASE}/api/health`);
         if (res.ok) {
-            statusDiv.innerHTML = `<i class="fa-solid fa-circle-check text-green"></i> Backend Server Connected (127.0.0.1:8000)`;
+            statusDiv.innerHTML = `<i class="fa-solid fa-circle-check text-green"></i> Backend Server Connected `;
         } else {
             throw new Error(`HTTP ${res.status}`);
         }
